@@ -31,14 +31,9 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import InMemoryVectorStore
 from langchain_openai import OpenAIEmbeddings
 from podcast_llm.outline import (
-    PodcastOutline,
-    PodcastSection,
-    PodcastSubsection,
     format_wikipedia_document
 )
 import logging
-from typing import List
-from pydantic import BaseModel, Field
 from langchain import hub
 from langchain_openai import ChatOpenAI
 from podcast_llm.outline import PodcastOutline
@@ -48,6 +43,9 @@ from langchain_core.vectorstores.base import VectorStoreRetriever
 from podcast_llm.config import PodcastConfig
 from podcast_llm.utils.llm import get_long_context_llm
 from podcast_llm.models import (
+    PodcastOutline,
+    PodcastSection,
+    PodcastSubsection,
     Script,
     Question,
     Answer
