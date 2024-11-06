@@ -16,6 +16,7 @@ Welcome to Podcast LLM's documentation!
 
    modules/config
    modules/generate
+   modules/models
    modules/outline
    modules/research
    modules/text_to_speech

@@ -7,26 +7,25 @@ like Wikipedia and search engines.
 
 Example:
     >>> from podcast_llm.research import suggest_wikipedia_articles
+    >>> from podcast_llm.models import WikipediaPages
     >>> config = PodcastConfig()
-    >>> articles = suggest_wikipedia_articles(config, "Artificial Intelligence")
+    >>> articles: WikipediaPages = suggest_wikipedia_articles(config, "Artificial Intelligence")
     >>> print(articles.pages[0].name)
     'Artificial intelligence'
 
 The research process includes:
-- Suggesting relevant Wikipedia articles
-- Performing targeted web searches
-- Extracting key information from sources
-- Organizing research into a structured format
+- Suggesting relevant Wikipedia articles via LangChain and GPT-4
+- Downloading Wikipedia article content
+- Performing targeted web searches with Tavily
+- Extracting key information from web articles
+- Organizing research into structured formats using Pydantic models
 
 The module uses various APIs and services to gather comprehensive background
 information while maintaining rate limits and handling errors gracefully.
 """
 
 
-import os
 import logging
-from typing import List
-from pydantic import BaseModel, Field
 from langchain import hub
 from langchain_community.retrievers import WikipediaRetriever
 from podcast_llm.outline import PodcastOutline
@@ -34,32 +33,13 @@ from tavily import TavilyClient
 from newspaper import Article, ArticleException
 from podcast_llm.config import PodcastConfig
 from podcast_llm.utils.llm import get_fast_llm
+from podcast_llm.models import (
+    SearchQueries,
+    WikipediaPages
+)
 
 
 logger = logging.getLogger(__name__)
-
-class WikipediaPage(BaseModel):
-    name: str = Field(..., title="Name of the wikipedia page")
-
-    @property
-    def as_str(self) -> str:
-        return f"{self.name}".strip()
-    
-
-class WikipediaPages(BaseModel):
-    pages: List[WikipediaPage] = Field(..., title="List of Wikipedia pages")
-
-
-class SearchQuery(BaseModel):
-    query: str = Field(..., title="Text of the search query")
-
-    @property
-    def as_str(self) -> str:
-        return f"### {self.query}".strip()
-    
-
-class SearchQueries(BaseModel):
-    queries: List[SearchQuery] = Field(..., title="List of search queries")
 
 
 def suggest_wikipedia_articles(config: PodcastConfig, topic: str) -> WikipediaPages:

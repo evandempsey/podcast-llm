@@ -1,3 +1,31 @@
+"""
+Podcast script writing module.
+
+This module handles the generation of natural conversational scripts for podcasts.
+It uses LLMs to create engaging question-answer exchanges between an interviewer
+and interviewee based on podcast outlines and research material.
+
+Key functionality includes:
+- Converting outline sections into natural dialogue
+- Maintaining conversational context and flow
+- Formatting conversation history for prompt context
+- Generating follow-up questions based on previous answers
+- Structuring complete podcast scripts with proper speaker labels
+
+The module leverages LangChain and GPT-4 to create dynamic multi-turn conversations
+that sound natural while covering the key points from the outline. It includes
+rate limiting and handles long-form content generation.
+
+Example:
+    script = write_podcast_script(
+        config=podcast_config,
+        outline=episode_outline,
+        background_info=research_docs
+    )
+    print(script.as_str)
+"""
+
+
 import logging
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import InMemoryVectorStore
@@ -19,62 +47,14 @@ from langchain.chains.llm import LLMChain
 from langchain_core.vectorstores.base import VectorStoreRetriever
 from podcast_llm.config import PodcastConfig
 from podcast_llm.utils.llm import get_long_context_llm
+from podcast_llm.models import (
+    Script,
+    Question,
+    Answer
+)
 
 
 logger = logging.getLogger(__name__)
-
-
-class Question(BaseModel):
-    """
-    A model representing a question in an interview conversation.
-
-    This class models an individual question asked by an interviewer in a podcast conversation.
-    It provides a structured way to store and format question text, with a helper property
-    to output the question in a standardized string format.
-
-    Attributes:
-        question (str): The actual text content of the question being asked
-    """
-    question: str = Field(..., title="Text of the question")
-
-    @property
-    def as_str(self) -> str:
-        return f"{self.question}".strip()
-
-
-class Answer(BaseModel):
-    """
-    A model representing an answer in an interview conversation.
-
-    This class models an individual answer given by an interviewee in a podcast conversation.
-    It provides a structured way to store and format answer text, with a helper property
-    to output the answer in a standardized string format.
-
-    Attributes:
-        answer (str): The actual text content of the answer being given
-    """
-    answer: str = Field(..., title="Text of the answer")
-
-    @property
-    def as_str(self) -> str:
-        return f"{self.answer}".strip()
-
-
-class ScriptLine(BaseModel):
-    speaker: str = Field(..., title="The person speaking")
-    text: str = Field(..., title="A line in a podcast script.")
-
-    @property
-    def as_str(self) -> str:
-        return f"{self.speaker}: {self.text}".strip()
-
-
-class Script(BaseModel):
-    lines: List[ScriptLine] = Field(..., title="Lines in a podcast script")
-
-    @property
-    def as_str(self) ->  str:
-        return '\n\n'.join([l.as_str for l in self.lines])
 
 
 def format_conversation_history(conversation_history: list) -> str:

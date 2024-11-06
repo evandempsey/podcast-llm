@@ -1,6 +1,10 @@
 import pytest
 from podcast_llm.utils.text import generate_markdown_script
-from podcast_llm.outline import PodcastOutline, PodcastSection, PodcastSubsection
+from podcast_llm.models import (
+    PodcastOutline, 
+    PodcastSection, 
+    PodcastSubsection
+)
 
 # Test fixtures
 @pytest.fixture

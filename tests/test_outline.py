@@ -1,10 +1,12 @@
 import pytest
 from podcast_llm.outline import (
-    PodcastOutline,
-    PodcastSection,
-    PodcastSubsection,
     format_wikipedia_document,
     outline_episode
+)
+from podcast_llm.models import (
+    PodcastOutline,
+    PodcastSection,
+    PodcastSubsection
 )
 from podcast_llm.config import PodcastConfig
 from unittest.mock import Mock, patch

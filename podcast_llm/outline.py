@@ -2,98 +2,37 @@
 Podcast outline generation module.
 
 This module provides functionality for generating and structuring podcast outlines.
-It defines data models for representing podcast sections and subsections, and includes
-utilities for formatting and manipulating outline structures.
+It contains utilities for formatting and manipulating outline structures, as well as
+functions for generating complete podcast outlines from topics and research material.
 
-The module uses Pydantic models to enforce data validation and provide a clean interface
-for working with podcast outline components. The models support hierarchical organization
-of content with sections containing subsections, and include helper methods for string
-formatting.
+The module leverages LangChain and GPT-4 to intelligently structure podcast content
+into a hierarchical outline format. It uses prompts from the LangChain Hub to ensure
+consistent and high-quality outline generation.
 
-Classes:
-    PodcastSubsection: Models an individual subsection within a podcast section
-    PodcastSection: Models a major section containing multiple subsections
+Functions:
+    format_wikipedia_document: Formats Wikipedia content for use in prompts
+    outline_episode: Generates a complete podcast outline from a topic and research
 
 Example:
-    section = PodcastSection(
-        title="Main Discussion",
-        subsections=[
-            PodcastSubsection(title="Key Concepts"),
-            PodcastSubsection(title="Historical Context")
-        ]
+    outline = outline_episode(
+        config=podcast_config,
+        topic="Artificial Intelligence",
+        background_info=research_docs
     )
-    print(section.as_str)
+    print(outline.as_str)
 """
 
 
-from typing import List
 import logging
 from langchain import hub
 from podcast_llm.config import PodcastConfig
 from podcast_llm.utils.llm import get_long_context_llm
-from pydantic import BaseModel, Field
+from podcast_llm.models import (
+    PodcastOutline
+)
 
 
 logger = logging.getLogger(__name__)
-
-
-class PodcastSubsection(BaseModel):
-    """
-    A model representing a subsection within a podcast section.
-
-    This class models an individual subsection of content within a larger podcast section.
-    It provides a structured way to store and format subsection titles, with a helper
-    property to output the subsection in a standardized string format with appropriate
-    indentation.
-
-    Attributes:
-        title (str): The title/heading text for this subsection
-    """
-    title: str = Field(..., description="A subsection in a podcast outline")
-
-    @property
-    def as_str(self) -> str:
-        return f"-- {self.title}".strip()
-
-
-class PodcastSection(BaseModel):
-    """
-    A model representing a section within a podcast outline.
-
-    This class models a major section of content within a podcast outline. Each section
-    contains a title and a list of subsections, providing hierarchical structure to
-    the podcast content. A helper property formats the section and its subsections
-    into a standardized string representation.
-
-    Attributes:
-        title (str): The title/heading text for this section
-        subsections (List[PodcastSubsection]): List of subsections contained within this section
-    """
-    title: str = Field(..., description="A section in a podcast outline")
-    subsections: List[PodcastSubsection] = Field(..., description="List of subsections in a podcast section")
-
-    @property
-    def as_str(self) -> str:
-        return f"{self.title}\n{'\n'.join([ss.as_str for ss in self.subsections])}".strip()
-    
-
-class PodcastOutline(BaseModel):
-    """
-    A model representing a complete podcast episode outline.
-
-    This class models the full structure of a podcast episode outline, containing
-    an ordered list of major sections, each with their own subsections. It provides
-    a hierarchical organization of the episode content and includes a helper property
-    to format the entire outline into a standardized string representation.
-
-    Attributes:
-        sections (List[PodcastSection]): Ordered list of major sections making up the episode outline
-    """
-    sections: List[PodcastSection] = Field(..., description="List of sections in a podcast outline")
-    
-    @property
-    def as_str(self) -> str:
-        return f"{'\n'.join([s.as_str for s in self.sections])}".strip()
 
 
 def format_wikipedia_document(doc):
