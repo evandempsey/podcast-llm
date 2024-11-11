@@ -1,6 +1,7 @@
 # LLM Configuration
 fast_llm_provider: google   # Options: 'openai', 'google', 'anthropic'
 long_context_llm_provider: google
+embeddings_model: openai
 
 # Text-to-Speech Configuration
 tts_provider: google  # Options: 'google', 'elevenlabs'

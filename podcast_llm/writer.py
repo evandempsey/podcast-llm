@@ -31,7 +31,6 @@ from typing import List
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import InMemoryVectorStore
 from langchain_core.documents import Document
-from langchain_openai import OpenAIEmbeddings
 from podcast_llm.outline import (
     format_wikipedia_document
 )
@@ -43,6 +42,7 @@ from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain.chains.llm import LLMChain
 from langchain_core.vectorstores.base import VectorStoreRetriever
 from podcast_llm.config import PodcastConfig
+from podcast_llm.utils.embeddings import get_embeddings_model
 from podcast_llm.utils.llm import get_long_context_llm
 from podcast_llm.models import (
     PodcastOutline,
@@ -209,11 +209,11 @@ def discuss(config: PodcastConfig,
     """
     logger.info(f"Simulating discussion on: {topic}")
 
-    interviewer_prompthub_path = "evandempsey/podcast_interviewer_role"
+    interviewer_prompthub_path = "evandempsey/podcast_interviewer_role:bc03af97"
     interviewer_prompt = hub.pull(interviewer_prompthub_path)
     logger.info(f"Got prompt from hub: {interviewer_prompthub_path}")
 
-    interviewee_prompthub_path = "evandempsey/podcast_interviewee_role"
+    interviewee_prompthub_path = "evandempsey/podcast_interviewee_role:0832c140"
     interviewee_prompt = hub.pull(interviewee_prompthub_path)
     logger.info(f"Got prompt from hub: {interviewee_prompthub_path}")
 
@@ -311,7 +311,7 @@ def write_draft_script(config: PodcastConfig,
     chunks = text_splitter.create_documents(all_texts)
 
     # Create vector store
-    embeddings = OpenAIEmbeddings()
+    embeddings = get_embeddings_model(config)
     vector_store = InMemoryVectorStore.from_documents(
         documents=chunks,
         embedding=embeddings
@@ -369,7 +369,7 @@ def write_final_script(config: PodcastConfig, topic: str, draft_script: list, ba
     """
     logger.info("Processing draft script in batches")
 
-    rewriter_prompthub_path = "evandempsey/podcast_rewriter"
+    rewriter_prompthub_path = "evandempsey/podcast_rewriter:181421e2"
     rewriter_prompt = hub.pull(rewriter_prompthub_path)
     logger.info(f"Got prompt from hub: {rewriter_prompthub_path}")
 
@@ -380,7 +380,7 @@ def write_final_script(config: PodcastConfig, topic: str, draft_script: list, ba
     )
 
     long_context_llm = get_long_context_llm(config, rate_limiter)
-    long_context_llm = ChatOpenAI(model="gpt-4o", rate_limiter=rate_limiter)
+    long_context_llm = get_long_context_llm(config, rate_limiter)
     rewriter_chain = rewriter_prompt | long_context_llm.with_structured_output(Script)
     
     final_script = []

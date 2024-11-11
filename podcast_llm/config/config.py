@@ -79,6 +79,7 @@ class PodcastConfig:
     # LLM config
     fast_llm_provider: str
     long_context_llm_provider: str
+    embeddings_model: str
     
     # TTS Config 
     tts_provider: str
@@ -140,6 +141,7 @@ class PodcastConfig:
         defaults = {
             'fast_llm_provider': 'openai',
             'long_context_llm_provider': 'openai',
+            'embeddings_model': 'openai',
             'tts_provider': 'google',
             'tts_settings': {
                 'elevenlabs': {

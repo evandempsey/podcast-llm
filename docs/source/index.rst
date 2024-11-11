@@ -27,6 +27,7 @@ Welcome to Podcast LLM's documentation!
    modules/research
    modules/text_to_speech
    modules/utils_checkpointer
+   modules/utils_embeddings
    modules/utils_llm
    modules/utils_rate_limits
    modules/utils_text

@@ -59,7 +59,7 @@ def suggest_wikipedia_articles(config: PodcastConfig, topic: str) -> WikipediaPa
     """
     logger.info(f'Suggesting Wikipedia articles for topic: {topic}')
 
-    prompthub_path = "evandempsey/podcast_wikipedia_suggestions"
+    prompthub_path = "evandempsey/podcast_wikipedia_suggestions:58c92df4"
     wikipedia_prompt = hub.pull(prompthub_path)
     logger.info(f"Got prompt from hub: {prompthub_path}")
 
@@ -217,7 +217,7 @@ def research_discussion_topics(config: PodcastConfig, topic: str, outline: Podca
             }
     """
     logger.info(f'Suggesting search queries based on podcast outline')
-    prompthub_path = "evandempsey/podcast_research_queries"
+    prompthub_path = "evandempsey/podcast_research_queries:561acf5f"
 
     search_queries_prompt = hub.pull(prompthub_path)
     logger.info(f"Got prompt from hub: {prompthub_path}")
