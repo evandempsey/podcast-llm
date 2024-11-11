@@ -1,3 +1,4 @@
+import os
 import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -52,6 +53,10 @@ def test_generate_with_audio_and_text_output(
     audio_output = tmp_path / 'test.mp3'
     text_output = tmp_path / 'test.md'
 
+    for e in ['GOOGLE_API_KEY', 'ELEVENLABS_API_KEY',  'OPENAI_API_KEY',
+              'TAVILY_API_KEY', 'ANTHROPIC_API_KEY']:
+        os.environ[e] = 'foo'
+
     # Execute
     generate(
         topic='test topic',
@@ -74,6 +79,10 @@ def test_generate_without_outputs() -> None:
     with patch('podcast_llm.generate.Checkpointer') as mock_checkpointer_class:
         mock_checkpointer = Mock()
         mock_checkpointer_class.return_value = mock_checkpointer
+
+        for e in ['GOOGLE_API_KEY', 'ELEVENLABS_API_KEY',  'OPENAI_API_KEY',
+                  'TAVILY_API_KEY', 'ANTHROPIC_API_KEY']:
+            os.environ[e] = 'foo'
         
         generate(
             topic='test topic',
