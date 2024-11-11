@@ -9,7 +9,9 @@ An intelligent system that automatically generates engaging podcast conversation
 
 ## Features
 
-- Automated research and content gathering using Tavily search
+- Two modes of operation:
+  - Research mode: Automated research and content gathering using Tavily search
+  - Context mode: Generate podcasts from provided source materials (URLs and files)
 - Dynamic podcast outline generation
 - Natural conversational script writing with multiple Q&A rounds
 - High-quality text-to-speech synthesis using Google Cloud or ElevenLabs
@@ -55,7 +57,11 @@ Listen to sample podcasts generated using Podcast-LLM:
 
 1. Generate a podcast about a topic:
    ```bash
+   # Research mode (default) - automatically researches the topic
    python -m podcast_llm.generate "Artificial Intelligence"
+
+   # Context mode - uses provided sources
+   python -m podcast_llm.generate "Machine Learning" --mode context --sources paper.pdf https://example.com/article
    ```
 
 2. Options:

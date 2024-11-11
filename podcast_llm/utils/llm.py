@@ -126,7 +126,7 @@ class LLMWrapper(Runnable):
 
                 logger.debug(f"LLM provider is {self.provider} and schema is provided. Adding format instructions to prompt:\n{format_instructions}")
                 messages = input.to_messages()
-                messages[0] = SystemMessage(content=f"{messages[0].content}\n\n{format_instructions}")
+                messages[0] = SystemMessage(content=f"{messages[0].content}\n{format_instructions}")
                 prompt = ChatPromptValue(messages=messages)
                 logger.debug(f"Modified prompt:\n{prompt.to_string()}")
 

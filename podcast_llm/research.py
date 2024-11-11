@@ -26,17 +26,19 @@ information while maintaining rate limits and handling errors gracefully.
 
 
 import logging
+from typing import List
 from langchain import hub
 from langchain_community.retrievers import WikipediaRetriever
+from langchain_core.documents import Document
 from podcast_llm.outline import PodcastOutline
 from tavily import TavilyClient
-from newspaper import Article, ArticleException
 from podcast_llm.config import PodcastConfig
 from podcast_llm.utils.llm import get_fast_llm
 from podcast_llm.models import (
     SearchQueries,
     WikipediaPages
 )
+from podcast_llm.extractors.web import WebSourceDocument
 
 
 logger = logging.getLogger(__name__)
@@ -159,7 +161,7 @@ def perform_tavily_queries(config: PodcastConfig, queries: SearchQueries) -> lis
     return list(urls_to_scrape)
 
 
-def download_page_content(urls: list) -> list:
+def download_page_content(urls: List[str]) -> List[Document]:
     """
     Download and parse content from a list of URLs.
 
@@ -183,28 +185,14 @@ def download_page_content(urls: list) -> list:
     downloaded_articles = []
     for url in urls:
         try:
-            article = Article(url)
-            article.download()
-            article.parse()
-            
-            if article.text:
-                downloaded_articles.append({
-                    'url': url,
-                    'title': article.title,
-                    'text': article.text
-                })
-                logger.info(f'Successfully downloaded article: {article.title}')
-            else:
-                logger.warning(f'No text content found for URL: {url}')
-                
-        except ArticleException as e:
-            logger.error(f'Failed to download article from {url}: {str(e)}')
+            web_source_doc = WebSourceDocument(url)
+            web_source_doc.extract()
+            downloaded_articles.append(web_source_doc.as_langchain_document())
         except Exception as e:
             logger.error(f'Unexpected error downloading {url}: {str(e)}')
             
     logger.info(f'Successfully downloaded {len(downloaded_articles)} articles')
     return downloaded_articles
-
 
 
 def research_discussion_topics(config: PodcastConfig, topic: str, outline: PodcastOutline) -> list:

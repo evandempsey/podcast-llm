@@ -10,7 +10,11 @@ Here's how to use the Podcast LLM system:
 
    .. code-block:: bash
 
+      # Research mode (default) - automatically researches the topic
       python -m podcast_llm.generate "Artificial Intelligence"
+
+      # Context mode - uses provided sources
+      python -m podcast_llm.generate "Machine Learning" --mode context --sources paper.pdf https://example.com/article
 
 2. Options:
 

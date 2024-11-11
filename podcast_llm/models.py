@@ -38,6 +38,11 @@ from typing import List
 from pydantic import BaseModel, Field
 
 
+class ContextDocument(BaseModel):
+    title: str = Field(description="The title of the document")
+    text: str = Field(description="The text of the document")
+    source: str = Field(description="The source of the document")
+
 
 class PodcastSubsection(BaseModel):
     """

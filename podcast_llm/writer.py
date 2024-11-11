@@ -27,8 +27,10 @@ Example:
 
 
 import logging
+from typing import List
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import InMemoryVectorStore
+from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from podcast_llm.outline import (
     format_wikipedia_document
@@ -50,6 +52,7 @@ from podcast_llm.models import (
     Question,
     Answer
 )
+from podcast_llm.utils.rate_limits import retry_with_exponential_backoff
 
 
 logger = logging.getLogger(__name__)
@@ -80,7 +83,7 @@ def format_conversation_history(conversation_history: list) -> str:
     return conversation
 
 
-def format_vector_results(docs):
+def format_vector_results(docs: List[Document]):
     """
     Format retrieved vector store documents into a readable string.
 
@@ -99,6 +102,7 @@ def format_vector_results(docs):
     return "\n\n".join([d.page_content for d in docs])
 
 
+@retry_with_exponential_backoff(max_retries=10, base_delay=2.0)
 def ask_question(topic: str, 
                  outline: PodcastOutline, 
                  section: PodcastSection, 
@@ -136,6 +140,7 @@ def ask_question(topic: str,
     })
 
 
+@retry_with_exponential_backoff(max_retries=10, base_delay=2.0)
 def answer_question(topic: str,
                     outline: PodcastOutline,
                     section: PodcastSection,
@@ -180,7 +185,7 @@ def answer_question(topic: str,
 def discuss(config: PodcastConfig,
             topic: str, 
             outline: PodcastOutline, 
-            background_info: list, 
+            background_info: List[Document], 
             vector_store: InMemoryVectorStore, 
             qa_rounds: int) -> list:
     """
@@ -256,8 +261,8 @@ def discuss(config: PodcastConfig,
 def write_draft_script(config: PodcastConfig,
                        topic: str, 
                        outline: PodcastOutline, 
-                       background_info: list, 
-                       deep_info: list, 
+                       background_info: List[Document], 
+                       deep_info: List[Document], 
                        qa_rounds: int):
     """
     Write a complete draft podcast script through simulated Q&A discussion.
@@ -299,7 +304,7 @@ def write_draft_script(config: PodcastConfig,
     # Process deep research articles
     deep_texts = []
     for article in deep_info:
-        deep_texts.append(article['text'])
+        deep_texts.append(article.page_content)
 
     # Combine all texts and split into chunks
     all_texts = background_texts + deep_texts
