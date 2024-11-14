@@ -4,7 +4,7 @@ long_context_llm_provider: google
 embeddings_model: openai
 
 # Text-to-Speech Configuration
-tts_provider: google  # Options: 'google', 'elevenlabs'
+tts_provider: google_multispeaker  # Options: 'google', 'elevenlabs', 'google_multispeaker'
 
 tts_settings:
   elevenlabs:
@@ -16,6 +16,12 @@ tts_settings:
     voice_mapping:
       Interviewer: en-US-Journey-F
       Interviewee: en-US-Journey-D
+    language_code: en-US
+    effects_profile_id: small-bluetooth-speaker-class-device
+  google_multispeaker:
+    voice_mapping:
+      Interviewer: R
+      Interviewee: S
     language_code: en-US
     effects_profile_id: small-bluetooth-speaker-class-device
 

@@ -158,6 +158,14 @@ class PodcastConfig:
                     },
                     'language_code': 'en-US',
                     'effects_profile_id': 'small-bluetooth-speaker-class-device'
+                },
+                'google_multispeaker': {
+                    'voice_mapping': {
+                        'Interviewer': 'R',
+                        'Interviewee': 'S'
+                    },
+                    'language_code': 'en-US',
+                    'effects_profile_id': 'small-bluetooth-speaker-class-device'
                 }
             },
             'output_format': 'mp3',

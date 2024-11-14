@@ -30,9 +30,11 @@ import logging
 import os
 from io import BytesIO
 from pathlib import Path
+from typing import List
 
 from elevenlabs import client as elevenlabs_client
 from google.cloud import texttospeech
+from google.cloud import texttospeech_v1beta1
 from pydub import AudioSegment
 
 from podcast_llm.config import PodcastConfig
@@ -46,7 +48,7 @@ logger = logging.getLogger(__name__)
 
 
 
-def clean_text_for_tts(lines):
+def clean_text_for_tts(lines: List) -> List:
     """
     Clean text lines for text-to-speech processing by removing special characters.
 
@@ -72,7 +74,7 @@ def clean_text_for_tts(lines):
 
 
 
-def merge_audio_files(audio_files: list, output_file: str, audio_format: str) -> None:
+def merge_audio_files(audio_files: List, output_file: str, audio_format: str) -> None:
     """
     Merge multiple audio files into a single output file.
 
@@ -93,14 +95,18 @@ def merge_audio_files(audio_files: list, output_file: str, audio_format: str) ->
     logger.info("Merging audio files...")
     try:
         combined = AudioSegment.empty()
-        
-        for file in audio_files:
-            combined += AudioSegment.from_file(file, format=audio_format)
-        
+
+        for filename in audio_files:
+            try:
+                audio = AudioSegment.from_file(filename, format="mp3")
+            except:
+                audio = AudioSegment.from_file(filename, format="wav")
+
+            combined += audio
+
         combined.export(output_file, format=audio_format)
     except Exception as e:
         raise
-
 
 
 @retry_with_exponential_backoff(max_retries=10, base_delay=2.0)
@@ -190,6 +196,67 @@ def process_line_elevenlabs(config: PodcastConfig, text: str, speaker: str):
     return audio_bytes.getvalue()
 
 
+@retry_with_exponential_backoff(max_retries=10, base_delay=2.0)
+@rate_limit_per_minute(max_requests_per_minute=20)
+def process_lines_google_multispeaker(config: PodcastConfig, chunks: List):
+    """
+    Process multiple lines of text into speech using Google's multi-speaker TTS service.
+
+    Takes a chunk of conversation lines and generates synthesized speech using Google's
+    multi-speaker TTS service. Handles up to 6 turns of conversation at once for more
+    natural conversational flow.
+
+    Args:
+        config (PodcastConfig): Configuration object containing API keys and settings
+        chunks (List): List of dictionaries containing conversation lines with structure:
+            {
+                'speaker': str,  # Speaker identifier
+                'text': str      # Line content to convert to speech
+            }
+
+    Returns:
+        bytes: Raw audio data in bytes format containing the synthesized speech
+    """
+    client = texttospeech_v1beta1.TextToSpeechClient(client_options={'api_key': config.google_api_key})
+    tts_settings = config.tts_settings['google_multispeaker']
+
+    # Create multi-speaker markup
+    multi_speaker_markup = texttospeech_v1beta1.MultiSpeakerMarkup()
+
+    # Add each line as a conversation turn
+    for line in chunks:
+        turn = texttospeech_v1beta1.MultiSpeakerMarkup.Turn()
+        turn.text = line['text']
+        turn.speaker = tts_settings['voice_mapping'][line['speaker']]
+        multi_speaker_markup.turns.append(turn)
+
+    # Configure synthesis input with multi-speaker markup
+    synthesis_input = texttospeech_v1beta1.SynthesisInput(
+        multi_speaker_markup=multi_speaker_markup
+    )
+
+    # Configure voice parameters
+    voice = texttospeech_v1beta1.VoiceSelectionParams(
+        language_code=tts_settings['language_code'],
+        name='en-US-Studio-MultiSpeaker'
+    )
+
+    # Configure audio output
+    audio_config = texttospeech_v1beta1.AudioConfig(
+        audio_encoding=texttospeech_v1beta1.AudioEncoding.MP3,
+        effects_profile_id=tts_settings['effects_profile_id']
+    )
+
+    # Generate speech
+    response = client.synthesize_speech(
+        input=synthesis_input,
+        voice=voice,
+        audio_config=audio_config
+    )
+
+    return response.audio_content
+
+
 def convert_to_speech(
         config: PodcastConfig,
         conversation: str, 
@@ -221,21 +288,39 @@ def convert_to_speech(
         logger.info(f"Generating audio files for {len(conversation)} lines...")
         audio_files = []
         counter = 0
-        for line in conversation:
-            logger.info(f"Generating audio for line {counter}...")
 
-            if config.tts_provider == 'google':
-                audio = process_line_google(config, line['text'], line['speaker'])
-            elif config.tts_provider == 'elevenlabs':
-                audio = process_line_elevenlabs(config, line['text'], line['speaker'])
+        if config.tts_provider == 'google_multispeaker':
+            # We will not use a line by line strategy. 
+            # Instead we will process in chunks of 6.
+            # Process conversation in chunks of 6 lines
+            for chunk_start in range(0, len(conversation), 6):
+                chunk = conversation[chunk_start:chunk_start + 6]
+                logger.info(f"Processing chunk {counter} with {len(chunk)} lines...")
+                
+                audio = process_lines_google_multispeaker(config, chunk)
+                
+                file_name = os.path.join(temp_audio_dir, f"{counter:03d}.{audio_format}")
+                with open(file_name, "wb") as out:
+                    out.write(audio)
+                audio_files.append(file_name)
+                
+                counter += 1
+        else:
+            for line in conversation:
+                logger.info(f"Generating audio for line {counter}...")
 
-            logger.info(f"Saving audio chunk {counter}...")
-            file_name = os.path.join(temp_audio_dir, f"{counter:03d}.{audio_format}")
-            with open(file_name, "wb") as out:
-                out.write(audio)
-            audio_files.append(file_name)
-            
-            counter += 1
+                if config.tts_provider == 'google':
+                    audio = process_line_google(config, line['text'], line['speaker'])
+                elif config.tts_provider == 'elevenlabs':
+                    audio = process_line_elevenlabs(config, line['text'], line['speaker'])
+
+                logger.info(f"Saving audio chunk {counter}...")
+                file_name = os.path.join(temp_audio_dir, f"{counter:03d}.{audio_format}")
+                with open(file_name, "wb") as out:
+                    out.write(audio)
+                audio_files.append(file_name)
+
+                counter += 1
 
         # Merge all audio files and save the result
         merge_audio_files(audio_files, output_file, audio_format)
