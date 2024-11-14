@@ -4,7 +4,7 @@ long_context_llm_provider: google
 embeddings_model: openai
 
 # Text-to-Speech Configuration
-tts_provider: google_multispeaker  # Options: 'google', 'elevenlabs', 'google_multispeaker'
+tts_provider: elevenlabs  # Options: 'google', 'elevenlabs', 'google_multispeaker'
 
 tts_settings:
   elevenlabs:

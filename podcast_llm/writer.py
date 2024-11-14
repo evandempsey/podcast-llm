@@ -321,6 +321,7 @@ def write_draft_script(config: PodcastConfig,
     return draft_script
 
 
+@retry_with_exponential_backoff(max_retries=10, base_delay=2.0)
 def rewrite_script_section(section: list, rewriter_chain) -> list:
     """
     Rewrite a section of the podcast script to improve flow and naturalness.

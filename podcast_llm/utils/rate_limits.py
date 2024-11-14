@@ -72,6 +72,7 @@ def retry_with_exponential_backoff(max_retries: int, base_delay: float = 1.0):
                         f'Attempt {attempt + 1}/{max_retries + 1} failed for {func.__name__}. '
                         f'Retrying in {delay:.1f}s...'
                     )
+                    logger.warning(f"Caught exception: {str(e)}")
                     time.sleep(delay)
                     delay *= 2  # Exponential backoff
                     
