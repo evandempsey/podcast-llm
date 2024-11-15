@@ -34,6 +34,7 @@ lxml-html-clean = "^0.4.1"
 pypdf = "^5.1.0"
 openai = "^1.54.4"
 wikipedia = "^1.4.0"
+audioop-lts = { version = "^0.2.0", python = "^3.13" }
 
 
 [tool.poetry.group.dev.dependencies]
