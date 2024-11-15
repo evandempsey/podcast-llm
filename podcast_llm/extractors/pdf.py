@@ -30,7 +30,7 @@ handling of PDF files alongside other source types like audio and web content.
 
 
 from podcast_llm.extractors.base import BaseSourceDocument
-from langchain.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyPDFLoader
 from typing import Optional
 
 
