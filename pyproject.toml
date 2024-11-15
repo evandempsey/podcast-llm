@@ -17,7 +17,7 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.12"
 langchain = "^0.3.7"
 python-dotenv = "^1.0.1"
 langchain-google-genai = "^2.0.4"
