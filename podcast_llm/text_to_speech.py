@@ -97,10 +97,7 @@ def merge_audio_files(audio_files: List, output_file: str, audio_format: str) ->
         combined = AudioSegment.empty()
 
         for filename in audio_files:
-            try:
-                audio = AudioSegment.from_file(filename, format="mp3")
-            except:
-                audio = AudioSegment.from_file(filename, format="wav")
+            audio = AudioSegment.from_file(filename)
 
             combined += audio
 
@@ -148,7 +145,7 @@ def process_line_google(config: PodcastConfig, text: str, speaker: str):
     
     # Select the type of audio file you want returned
     audio_config = texttospeech.AudioConfig(
-        audio_encoding=texttospeech.AudioEncoding.MP3,
+        audio_encoding=texttospeech.AudioEncoding.MP3_64_KBPS,
         effects_profile_id=tts_settings['effects_profile_id']
     )
     
@@ -243,7 +240,7 @@ def process_lines_google_multispeaker(config: PodcastConfig, chunks: List):
 
     # Configure audio output
     audio_config = texttospeech_v1beta1.AudioConfig(
-        audio_encoding=texttospeech_v1beta1.AudioEncoding.MP3,
+        audio_encoding=texttospeech_v1beta1.AudioEncoding.MP3_64_KBPS,
         effects_profile_id=tts_settings['effects_profile_id']
     )
 
@@ -284,6 +281,12 @@ def convert_to_speech(
     Raises:
         Exception: If any errors occur during TTS conversion or file operations
     """
+    tts_audio_formats = {
+        'elevenlabs': 'mp3',
+        'google': 'mp3',
+        'google_multispeaker': 'mp3'
+    }
+
     try:
         logger.info(f"Generating audio files for {len(conversation)} lines...")
         audio_files = []
@@ -293,13 +296,13 @@ def convert_to_speech(
             # We will not use a line by line strategy. 
             # Instead we will process in chunks of 6.
             # Process conversation in chunks of 6 lines
-            for chunk_start in range(0, len(conversation), 6):
-                chunk = conversation[chunk_start:chunk_start + 6]
+            for chunk_start in range(0, len(conversation), 4):
+                chunk = conversation[chunk_start:chunk_start + 4]
                 logger.info(f"Processing chunk {counter} with {len(chunk)} lines...")
                 
                 audio = process_lines_google_multispeaker(config, chunk)
                 
-                file_name = os.path.join(temp_audio_dir, f"{counter:03d}.{audio_format}")
+                file_name = os.path.join(temp_audio_dir, f"{counter:03d}.{tts_audio_formats[config.tts_provider]}")
                 with open(file_name, "wb") as out:
                     out.write(audio)
                 audio_files.append(file_name)
@@ -315,7 +318,7 @@ def convert_to_speech(
                     audio = process_line_elevenlabs(config, line['text'], line['speaker'])
 
                 logger.info(f"Saving audio chunk {counter}...")
-                file_name = os.path.join(temp_audio_dir, f"{counter:03d}.{audio_format}")
+                file_name = os.path.join(temp_audio_dir, f"{counter:03d}.{tts_audio_formats[config.tts_provider]}")
                 with open(file_name, "wb") as out:
                     out.write(audio)
                 audio_files.append(file_name)
