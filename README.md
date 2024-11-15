@@ -2,6 +2,8 @@
 
 ![Tests](https://github.com/evandempsey/podcast-llm/actions/workflows/pytest.yml/badge.svg)
 [![codecov](https://codecov.io/gh/evandempsey/podcast-llm/branch/main/graph/badge.svg)](https://codecov.io/gh/evandempsey/podcast-llm)
+[![GitHub stars](https://img.shields.io/github/stars/evandempsey/podcast-llm.svg?style=social&label=Star)](https://github.com/evandempsey/podcast-llm)
+
 
 An intelligent system that automatically generates engaging podcast conversations using LLMs and text-to-speech technology.
 
@@ -25,6 +27,10 @@ Listen to sample podcasts generated using Podcast-LLM:
 ### UFO Crash Retrieval (Elevenlabs voices)
 
 [![Play Podcast Sample](https://img.shields.io/badge/Play%20Podcast-brightgreen?style=for-the-badge&logo=soundcloud)](https://soundcloud.com/evan-dempsey-153309617/ufo-crash-retrieval-elevenlabs-voices)
+
+### Podcast-LLM Overview (Google multispeaker voices)
+
+[![Play Podcast Sample](https://img.shields.io/badge/Play%20Podcast-brightgreen?style=for-the-badge&logo=soundcloud)](https://soundcloud.com/evan-dempsey-153309617/podcast-llm-with-anthropic-and-google-multispeaker)
 
 ### Robotic Process Automation (Google voices)
 

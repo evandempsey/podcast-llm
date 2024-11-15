@@ -32,6 +32,7 @@ from .pdf import PDFSourceDocument
 from .youtube import YouTubeSourceDocument
 from .web import WebSourceDocument
 from .audio import AudioSourceDocument
+from .plaintext import MarkdownSourceDocument, TextSourceDocument
 
 
 logger = logging.getLogger(__name__)
@@ -66,7 +67,9 @@ def extract_content_from_sources(sources: List) -> List:
         ('youtube', (lambda s: 'youtube.com' in s or 'youtu.be' in s, YouTubeSourceDocument)),
         ('web', (lambda s: s.startswith(('http://', 'https://', 'ftp://')), WebSourceDocument)),
         ('pdf', (lambda s: s.lower().endswith('.pdf'), PDFSourceDocument)),
-        ('audio', (lambda s: s.lower().endswith(('.mp3', '.wav', '.m4a', '.ogg')), AudioSourceDocument))
+        ('audio', (lambda s: s.lower().endswith(('.mp3', '.wav', '.m4a', '.ogg')), AudioSourceDocument)),
+        ('markdown', (lambda s: s.lower().endswith(('.md', '.markdown')), MarkdownSourceDocument)),
+        ('text', (lambda s: s.lower().endswith(('.txt')), TextSourceDocument))
     ])
     
     for source in sources:
