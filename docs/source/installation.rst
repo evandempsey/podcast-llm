@@ -3,6 +3,14 @@ Installation
 
 To install Podcast LLM, follow these steps:
 
+1. Install using pip:
+
+   .. code-block:: bash
+
+      pip install podcast-llm
+
+To install for development, follow these steps:
+
 1. Clone the repository:
 
    .. code-block:: bash

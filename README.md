@@ -46,23 +46,12 @@ Listen to sample podcasts generated using Podcast-LLM:
 
 ## Installation
 
-1. Clone the repository:
+1. Install using pip:
    ```bash
-   git clone https://github.com/yourusername/podcast-llm.git
-   cd podcast-llm
+   pip install podcast-llm
    ```
 
-2. Install Poetry (if not already installed):
-   ```bash
-   curl -sSL https://install.python-poetry.org | python3 -
-   ```
-
-3. Install dependencies:
-   ```bash
-   poetry install
-   ```
-
-4. Set up environment variables in `.env`:
+2. Set up environment variables in `.env`:
    ```
    OPENAI_API_KEY=your_openai_key
    GOOGLE_API_KEY=your_google_key 
@@ -76,25 +65,25 @@ Listen to sample podcasts generated using Podcast-LLM:
 1. Generate a podcast about a topic:
    ```bash
    # Research mode (default) - automatically researches the topic
-   poetry run podcast-llm "Artificial Intelligence"
+   podcast-llm "Artificial Intelligence"
 
    # Context mode - uses provided sources
-   poetry run podcast-llm "Machine Learning" --mode context --sources paper.pdf https://example.com/article
+   podcast-llm "Machine Learning" --mode context --sources paper.pdf https://example.com/article
    ```
 
 2. Options:
    ```bash
    # Customize number of Q&A rounds per section
-   poetry run podcast-llm "Linux" --qa-rounds 3
+   podcast-llm "Linux" --qa-rounds 3
 
    # Disable checkpointing
-   poetry run podcast-llm "Space Exploration" --checkpoint false
+   podcast-llm "Space Exploration" --checkpoint false
 
    # Generate audio output
-   poetry run podcast-llm "Quantum Computing" --audio-output podcast.mp3
+   podcast-llm "Quantum Computing" --audio-output podcast.mp3
 
    # Generate Markdown output
-   poetry run podcast-llm "Machine Learning" --text-output podcast.md
+   podcast-llm "Machine Learning" --text-output podcast.md
    ```
 
 3. Customize voices and other settings in `config/config.yaml`

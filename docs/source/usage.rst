@@ -11,26 +11,26 @@ Here's how to use the Podcast LLM system:
    .. code-block:: bash
 
       # Research mode (default) - automatically researches the topic
-      poetry run podcast-llm "Artificial Intelligence"
+      podcast-llm "Artificial Intelligence"
 
       # Context mode - uses provided sources
-      poetry run podcast-llm "Machine Learning" --mode context --sources paper.pdf https://example.com/article
+      podcast-llm "Machine Learning" --mode context --sources paper.pdf https://example.com/article
 
 2. Options:
 
    .. code-block:: bash 
     
       # Customize number of Q&A rounds per section
-      poetry run podcast-llm "Linux" --qa-rounds 3
+      podcast-llm "Linux" --qa-rounds 3
 
       # Disable checkpointing 
-      poetry run podcast-llm "Space Exploration" --checkpoint false
+      podcast-llm "Space Exploration" --checkpoint false
 
       # Generate audio output
-      poetry run podcast-llm "Quantum Computing" --audio-output podcast.mp3
+      podcast-llm "Quantum Computing" --audio-output podcast.mp3
 
       # Generate Markdown output
-      poetry run podcast-llm "Machine Learning" --text-output podcast.md
+      podcast-llm "Machine Learning" --text-output podcast.md
 
 Configuration
 ------------
