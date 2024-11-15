@@ -3,6 +3,9 @@
 ![Tests](https://github.com/evandempsey/podcast-llm/actions/workflows/pytest.yml/badge.svg)
 [![codecov](https://codecov.io/gh/evandempsey/podcast-llm/branch/main/graph/badge.svg)](https://codecov.io/gh/evandempsey/podcast-llm)
 [![GitHub stars](https://img.shields.io/github/stars/evandempsey/podcast-llm.svg?style=social&label=Star)](https://github.com/evandempsey/podcast-llm)
+[![GitHub Downloads](https://img.shields.io/github/downloads/evandempsey/podcast-llm/total.svg)](https://github.com/evandempsey/podcast-llm/releases)
+[![GitHub issues](https://img.shields.io/github/issues/evandempsey/podcast-llm.svg)](https://github.com/evandempsey/podcast-llm/issues)
+[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc/4.0/)
 
 
 An intelligent system that automatically generates engaging podcast conversations using LLMs and text-to-speech technology.
@@ -27,6 +30,10 @@ Listen to sample podcasts generated using Podcast-LLM:
 ### UFO Crash Retrieval (Elevenlabs voices)
 
 [![Play Podcast Sample](https://img.shields.io/badge/Play%20Podcast-brightgreen?style=for-the-badge&logo=soundcloud)](https://soundcloud.com/evan-dempsey-153309617/ufo-crash-retrieval-elevenlabs-voices)
+
+### The Behenian Fixed Stars (Google multispeaker voices)
+
+[![Play Podcast Sample](https://img.shields.io/badge/Play%20Podcast-brightgreen?style=for-the-badge&logo=soundcloud)](https://soundcloud.com/evan-dempsey-153309617/behenian-fixed-stars)
 
 ### Podcast-LLM Overview (Google multispeaker voices)
 

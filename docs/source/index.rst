@@ -18,6 +18,7 @@ Welcome to Podcast LLM's documentation!
    modules/extractors_audio
    modules/extractors_base
    modules/extractors_pdf
+   modules/extractors_plaintext
    modules/extractors_utils
    modules/extractors_web
    modules/extractors_youtube
