@@ -10,14 +10,20 @@ To install Podcast LLM, follow these steps:
       git clone https://github.com/yourusername/podcast-llm.git
       cd podcast-llm
 
-2. Install the required packages:
+2. Install Poetry (if not already installed):
 
    .. code-block:: bash
 
-      pip install -r requirements.txt
+      curl -sSL https://install.python-poetry.org | python3 -
 
-For development:
+3. Install dependencies:
+
+   .. code-block:: bash
+
+      poetry install
+
+For development dependencies:
 
 .. code-block:: bash
 
-   pip install -r requirements-dev.txt 
+   poetry install --with dev

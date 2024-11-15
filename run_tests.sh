@@ -1,2 +1,2 @@
 #!/bin/bash
-python -m pytest --cov --cov-report=xml
+poetry run pytest --cov --cov-report=xml
