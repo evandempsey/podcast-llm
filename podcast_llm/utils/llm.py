@@ -25,6 +25,7 @@ import logging
 import pydantic
 from typing import Any, Optional, Union
 
+from langchain_core.exceptions import OutputParserException
 from langchain_core.language_models.base import LanguageModelInput
 from langchain_core.messages import BaseMessage, SystemMessage
 from langchain_core.output_parsers import PydanticOutputParser, StrOutputParser
@@ -74,7 +75,7 @@ class LLMWrapper(Runnable):
         self.provider = provider
         self.model = model
         self.temperature = temperature
-        self.max_tokens = max_tokens,
+        self.max_tokens = max_tokens
         self.rate_limiter = rate_limiter
         self.parser = StrOutputParser()
         self.schema = None
@@ -89,7 +90,48 @@ class LLMWrapper(Runnable):
             raise ValueError(f"The LLM provider value '{self.provider}' is not supported.")
 
         model_class = provider_to_model[self.provider]
-        self.llm = model_class(model=self.model, rate_limiter=self.rate_limiter)
+        self.llm = model_class(model=self.model, rate_limiter=self.rate_limiter, max_tokens=self.max_tokens)
+
+    def coerce_to_schema(self, llm_output: str):
+        """
+        Coerce raw LLM output into a structured schema object.
+
+        Takes unstructured text output from the LLM and attempts to parse it into
+        a structured Pydantic object based on the defined schema. Currently supports
+        Question and Answer schema types.
+
+        Args:
+            llm_output (str): Raw text output from the LLM to be coerced
+
+        Returns:
+            BaseModel: Pydantic object matching the defined schema type
+
+        Raises:
+            ValueError: If no schema is defined
+            OutputParserException: If output cannot be coerced to the schema
+
+        The coercion maps the raw text to the appropriate schema field:
+        - Question schema -> 'question' field
+        - Answer schema -> 'answer' field
+        """
+        if not self.schema:
+            raise ValueError('Schema is not defined.')
+
+        schema_class_name = self.schema.__name__
+
+        if schema_class_name == 'Question':
+            schema_field_name = 'question'
+        elif schema_class_name == 'Answer':
+            schema_field_name = 'answer'
+        else:
+            raise OutputParserException(
+                f"Unable to coerce output to schema: {schema_class_name}",
+                llm_output=llm_output
+            )
+
+        schema_values = {schema_field_name: llm_output}
+        pydantic_object = self.schema(**schema_values)
+        return pydantic_object
 
     def invoke(
         self,
@@ -117,22 +159,23 @@ class LLMWrapper(Runnable):
         - Google: Custom handling for structured output via parser and format instructions
         """
         logger.debug(f"Invoking LLM with prompt:\n{input.to_string()}")
+        prompt = input
 
-        if self.provider in ('openai', 'anthropic',):
-            return self.llm.invoke(input=input, config=config)
-        elif self.provider == 'google':
-            if self.schema is not None:
-                format_instructions = self.parser.get_format_instructions()
+        if self.provider == 'google' and self.schema is not None:
+            format_instructions = self.parser.get_format_instructions()
 
-                logger.debug(f"LLM provider is {self.provider} and schema is provided. Adding format instructions to prompt:\n{format_instructions}")
-                messages = input.to_messages()
-                messages[0] = SystemMessage(content=f"{messages[0].content}\n{format_instructions}")
-                prompt = ChatPromptValue(messages=messages)
-                logger.debug(f"Modified prompt:\n{prompt.to_string()}")
+            logger.debug(f"LLM provider is {self.provider} and schema is provided. Adding format instructions to prompt:\n{format_instructions}")
+            messages = input.to_messages()
+            messages[0] = SystemMessage(content=f"{messages[0].content}\n{format_instructions}")
+            prompt = ChatPromptValue(messages=messages)
+            logger.debug(f"Modified prompt:\n{prompt.to_string()}")
 
-                return self.llm.invoke(input=prompt, config=config)
-            else:
-                return self.llm.invoke(input=input, config=config)
+        try:
+            return self.llm.invoke(input=prompt, config=config)
+        except OutputParserException as ex:
+            logger.debug(f"Error parsing LLM output. Coercing to fit schema.\n{ex.llm_output}")
+            return self.coerce_to_schema(ex.llm_output)
+
 
     def with_structured_output(
         self,
