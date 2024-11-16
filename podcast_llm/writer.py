@@ -388,7 +388,7 @@ def write_final_script(config: PodcastConfig, topic: str, draft_script: list, ba
     
     # Process script in batches of bath_size
     for i in range(0, len(draft_script), batch_size):
-        logger.info(f"Rewriting lines {i+1} to {i+batch_size+1} of {len(draft_script)}")
+        logger.info(f"Rewriting lines {i+1} to {i+batch_size} of {len(draft_script)}")
         batch = draft_script[i:i + batch_size]
         final_script.extend(rewrite_script_section(batch, rewriter_chain))
 
