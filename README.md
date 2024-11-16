@@ -27,6 +27,10 @@ An intelligent system that automatically generates engaging podcast conversation
 
 Listen to sample podcasts generated using Podcast-LLM:
 
+### Structured JSON Output from LLMs (Google multispeaker voices)
+
+[![Play Podcast Sample](https://img.shields.io/badge/Play%20Podcast-brightgreen?style=for-the-badge&logo=soundcloud)](https://soundcloud.com/evan-dempsey-153309617/llm-structured-output)
+
 ### UFO Crash Retrieval (Elevenlabs voices)
 
 [![Play Podcast Sample](https://img.shields.io/badge/Play%20Podcast-brightgreen?style=for-the-badge&logo=soundcloud)](https://soundcloud.com/evan-dempsey-153309617/ufo-crash-retrieval-elevenlabs-voices)
