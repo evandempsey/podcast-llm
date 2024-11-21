@@ -71,10 +71,14 @@ class YouTubeSourceDocument(BaseSourceDocument):
         # Handle youtube.com URLs
         if 'v=' in self.src:
             return self.src.split('v=')[1].split('&')[0]
-            
+
         # Handle embed URLs
         if 'embed/' in self.src:
             return self.src.split('embed/')[-1].split('?')[0]
+
+        # Handle embed URLs
+        if 'shorts/' in self.src:
+            return self.src.split('shorts/')[-1].split('?')[0]
             
         # If no URL patterns match, assume src is already a video ID
         return self.src

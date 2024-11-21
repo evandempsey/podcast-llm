@@ -9,6 +9,8 @@ from podcast_llm.extractors.youtube import YouTubeSourceDocument
     ('dQw4w9WgXcQ', 'dQw4w9WgXcQ'),
     ('https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=123', 'dQw4w9WgXcQ'),
     ('https://youtu.be/dQw4w9WgXcQ?t=123', 'dQw4w9WgXcQ'),
+    ('https://www.youtube.com/shorts/f7ZNtQZPha8', 'f7ZNtQZPha8'),
+    ('https://youtube.com/shorts/HJrbhrsODMk?si=XNDlfvA9JfgbM_WR', 'HJrbhrsODMk'),
 ])
 def test_extract_video_id(url: str, expected_id: str) -> None:
     """Test that video IDs are correctly extracted from various URL formats."""
