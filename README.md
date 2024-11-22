@@ -51,7 +51,7 @@ Listen to sample podcasts generated using Podcast-LLM:
 
 ## Web Interface
 
-![Gradio Web Interface](assets/images/gradio_ui.png)
+![Gradio Web Interface](https://raw.githubusercontent.com/evandempsey/podcast-llm/main/assets/images/gradio_ui.png)
 
 ## Installation
 
