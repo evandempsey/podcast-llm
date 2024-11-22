@@ -145,7 +145,7 @@ def process_line_google(config: PodcastConfig, text: str, speaker: str):
     
     # Select the type of audio file you want returned
     audio_config = texttospeech.AudioConfig(
-        audio_encoding=texttospeech.AudioEncoding.MP3_64_KBPS,
+        audio_encoding=texttospeech.AudioEncoding.MP3,
         effects_profile_id=tts_settings['effects_profile_id']
     )
     
