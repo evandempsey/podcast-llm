@@ -23,6 +23,7 @@ Welcome to Podcast LLM's documentation!
    modules/extractors_web
    modules/extractors_youtube
    modules/generate
+   modules/gui
    modules/models
    modules/outline
    modules/research

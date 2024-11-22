@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "podcast-llm"
-version = "0.1.2"
+version = "0.2.0"
 description = "An intelligent system that automatically generates engaging podcast conversations using LLMs and text-to-speech technology."
 authors = ["Evan Dempsey <evandempsey@gmail.com>"]
 license = "Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)"
@@ -49,6 +49,8 @@ sphinxcontrib-napoleon = "^0.7"
 
 [tool.poetry.scripts]
 podcast-llm = "podcast_llm.generate:main"
+podcast-llm-gui = "podcast_llm.gui:main"
+
 
 [build-system]
 requires = ["poetry-core"]

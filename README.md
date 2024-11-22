@@ -22,6 +22,7 @@ An intelligent system that automatically generates engaging podcast conversation
 - High-quality text-to-speech synthesis using Google Cloud or ElevenLabs
 - Checkpoint system to save progress and resume generation
 - Configurable voices and audio settings
+- Gradio UI
 
 ## Examples
 
@@ -47,6 +48,10 @@ Listen to sample podcasts generated using Podcast-LLM:
 
 [![Play Podcast Sample](https://img.shields.io/badge/Play%20Podcast-brightgreen?style=for-the-badge&logo=soundcloud)](https://soundcloud.com/evan-dempsey-153309617/robotic-process-automation-google-voices)
 
+
+## Web Interface
+
+![Gradio Web Interface](assets/images/gradio_ui.png)
 
 ## Installation
 
@@ -91,6 +96,21 @@ Listen to sample podcasts generated using Podcast-LLM:
    ```
 
 3. Customize voices and other settings in `config/config.yaml`
+
+4. Launch the Gradio web interface:
+   ```bash
+   # Start the web UI
+   podcast-llm-gui
+   ```
+
+   This launches a user-friendly web interface where you can:
+   - Enter a podcast topic
+   - Choose between research and context modes
+   - Upload source files and URLs for context mode
+   - Configure Q&A rounds and checkpointing
+   - Specify output paths for text and audio
+   - Monitor generation progress in real-time
+
 
 ## License
 

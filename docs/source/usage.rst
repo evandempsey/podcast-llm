@@ -32,7 +32,27 @@ Here's how to use the Podcast LLM system:
       # Generate Markdown output
       podcast-llm "Machine Learning" --text-output podcast.md
 
+
 Configuration
 ------------
 
 The system can be configured using the ``config.yaml`` file:
+
+
+Launching the Web Interface
+-------------------------
+
+You can launch the Gradio web interface using:
+
+.. code-block:: bash
+
+   podcast-llm-gui
+
+This launches a user-friendly web interface where you can:
+
+- Enter a podcast topic
+- Choose between research and context modes  
+- Upload source files and URLs for context mode
+- Configure Q&A rounds and checkpointing
+- Specify output paths for text and audio
+- Monitor generation progress in real-time
