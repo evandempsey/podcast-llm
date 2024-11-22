@@ -55,7 +55,8 @@ def generate(
     audio_output: Optional[str] = None,
     text_output: Optional[str] = None,
     config: str = DEFAULT_CONFIG_PATH,
-    debug: bool = False
+    debug: bool = False,
+    log_file: Optional[str] = None
 ) -> None:
     """
     Generate a podcast episode.
@@ -70,9 +71,10 @@ def generate(
         text_output: Path to save text output
         config: Path to config file
         debug: Whether to enable debug logging
+        log_file: Log output file
     """
     log_level = logging.DEBUG if debug else logging.INFO
-    setup_logging(log_level)
+    setup_logging(log_level, output_file=log_file)
     
     config = PodcastConfig.load(yaml_path=config)
 
