@@ -18,12 +18,16 @@ def mock_source_docs():
     
     audio_doc = Mock()
     audio_doc.as_langchain_document.return_value = Document(page_content='audio content')
+
+    word_doc = Mock()
+    word_doc.as_langchain_document.return_value = Document(page_content='word content')
     
     return {
         'youtube': youtube_doc,
         'pdf': pdf_doc, 
         'web': web_doc,
-        'audio': audio_doc
+        'audio': audio_doc,
+        'word': word_doc
     }
 
 
@@ -69,6 +73,16 @@ def test_extract_content_from_sources_audio(mock_source_docs):
         assert len(result) == 1
         assert result[0].page_content == 'audio content'
         mock_source_docs['audio'].extract.assert_called_once()
+
+def test_extract_content_from_sources_docx(mock_source_docs):
+    """Test extracting content from Word source"""
+    with patch('podcast_llm.extractors.utils.WordSourceDocument', return_value=mock_source_docs['word']):
+        sources = ['document.docx']
+        result = utils.extract_content_from_sources(sources)
+        
+        assert len(result) == 1
+        assert result[0].page_content == 'word content'
+        mock_source_docs['word'].extract.assert_called_once()
 
 
 def test_extract_content_from_sources_multiple(mock_source_docs):

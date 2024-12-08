@@ -193,6 +193,39 @@ def process_line_elevenlabs(config: PodcastConfig, text: str, speaker: str):
     return audio_bytes.getvalue()
 
 
+def combine_consecutive_speaker_chunks(chunks: List[dict]) -> List[dict]:
+    """
+    Combine consecutive chunks from the same speaker into single chunks.
+    
+    Args:
+        chunks (List[dict]): List of dictionaries containing conversation chunks with structure:
+            {
+                'speaker': str,  # Speaker identifier
+                'text': str      # Text content
+            }
+    
+    Returns:
+        List[dict]: List of combined chunks where consecutive entries from the same speaker
+                   are merged into single chunks
+    """
+    combined_chunks = []
+    current_chunk = None
+
+    for chunk in chunks:
+        if current_chunk is None:
+            current_chunk = chunk.copy()
+        elif current_chunk['speaker'] == chunk['speaker']:
+            current_chunk['text'] += ' ' + chunk['text']
+        else:
+            combined_chunks.append(current_chunk)
+            current_chunk = chunk.copy()
+
+    if current_chunk is not None:
+        combined_chunks.append(current_chunk)
+
+    return combined_chunks
+
+
 @retry_with_exponential_backoff(max_retries=10, base_delay=2.0)
 @rate_limit_per_minute(max_requests_per_minute=20)
 def process_lines_google_multispeaker(config: PodcastConfig, chunks: List):
@@ -216,6 +249,9 @@ def process_lines_google_multispeaker(config: PodcastConfig, chunks: List):
     """
     client = texttospeech_v1beta1.TextToSpeechClient(client_options={'api_key': config.google_api_key})
     tts_settings = config.tts_settings['google_multispeaker']
+
+    # Combine consecutive lines from same speaker
+    chunks = combine_consecutive_speaker_chunks(chunks)
 
     # Create multi-speaker markup
     multi_speaker_markup = texttospeech_v1beta1.MultiSpeakerMarkup()

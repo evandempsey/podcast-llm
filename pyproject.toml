@@ -37,6 +37,7 @@ wikipedia = "^1.4.0"
 audioop-lts = { version = "^0.2.0", python = "^3.13" }
 gradio = "^5.6.0"
 gradio-log = "^0.0.7"
+python-docx = "^1.1.2"
 
 
 [tool.poetry.group.dev.dependencies]
