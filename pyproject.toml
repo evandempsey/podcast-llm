@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "podcast-llm"
-version = "0.2.1"
+version = "0.2.2"
 description = "An intelligent system that automatically generates engaging podcast conversations using LLMs and text-to-speech technology."
 authors = ["Evan Dempsey <evandempsey@gmail.com>"]
 license = "Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)"
