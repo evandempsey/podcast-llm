@@ -75,6 +75,7 @@ class PodcastConfig:
     openai_api_key: str
     tavily_api_key: str
     anthropic_api_key: str
+    sixtydb_api_key: str
 
     # LLM config
     fast_llm_provider: str
@@ -130,6 +131,9 @@ class PodcastConfig:
             if not value:
                 raise ValueError(f'Missing required environment variable: {var}')
             config_dict[var.lower()] = value
+
+        # Optional API keys (only required if their provider is selected)
+        config_dict['sixtydb_api_key'] = os.getenv('SIXTYDB_API_KEY', '')
             
         # Load and merge yaml config if provided
         if yaml_path:
@@ -166,6 +170,18 @@ class PodcastConfig:
                     },
                     'language_code': 'en-US',
                     'effects_profile_id': 'small-bluetooth-speaker-class-device'
+                },
+                'sixtydb': {
+                    'base_url': 'https://api.60db.ai',
+                    'voice_mapping': {
+                        'Interviewer': 'fbb75ed2-975a-40c7-9e06-38e30524a9a1',
+                        'Interviewee': 'fbb75ed2-975a-40c7-9e06-38e30524a9a1'
+                    },
+                    'enhance': True,
+                    'speed': 1.0,
+                    'stability': 50,
+                    'similarity': 75,
+                    'output_format': 'mp3'
                 }
             },
             'output_format': 'mp3',
@@ -179,6 +195,11 @@ class PodcastConfig:
                     'base_delay': 2.0
                 },
                 'google': {
+                    'requests_per_minute': 20,
+                    'max_retries': 10,
+                    'base_delay': 2.0
+                },
+                'sixtydb': {
                     'requests_per_minute': 20,
                     'max_retries': 10,
                     'base_delay': 2.0

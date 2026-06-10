@@ -4,7 +4,7 @@ long_context_llm_provider: openai
 embeddings_model: openai
 
 # Text-to-Speech Configuration
-tts_provider: google_multispeaker  # Options: 'google', 'elevenlabs', 'google_multispeaker'
+tts_provider: google_multispeaker  # Options: 'google', 'elevenlabs', 'google_multispeaker', 'sixtydb'
 
 tts_settings:
   elevenlabs:
@@ -24,6 +24,17 @@ tts_settings:
       Interviewee: S
     language_code: en-US
     effects_profile_id: small-bluetooth-speaker-class-device
+  sixtydb:
+    base_url: https://api.60db.ai
+    voice_mapping:
+      # Replace these with the voice_ids returned by GET /default-voices
+      Interviewer: fbb75ed2-975a-40c7-9e06-38e30524a9a1
+      Interviewee: fbb75ed2-975a-40c7-9e06-38e30524a9a1
+    enhance: true
+    speed: 1.0
+    stability: 50
+    similarity: 75
+    output_format: mp3
 
 # Audio output settings
 output_format: mp3  # Options: 'mp3', 'wav'
@@ -40,6 +51,10 @@ rate_limits:
     max_retries: 10
     base_delay: 2.0
   google:
+    requests_per_minute: 20
+    max_retries: 10
+    base_delay: 2.0
+  sixtydb:
     requests_per_minute: 20
     max_retries: 10
     base_delay: 2.0

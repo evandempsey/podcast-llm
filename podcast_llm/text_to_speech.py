@@ -26,12 +26,14 @@ Typical usage:
 """
 
 
+import base64
 import logging
 import os
 from io import BytesIO
 from pathlib import Path
 from typing import List
 
+import requests
 from elevenlabs import client as elevenlabs_client
 from google.cloud import texttospeech
 from google.cloud import texttospeech_v1beta1
@@ -193,6 +195,64 @@ def process_line_elevenlabs(config: PodcastConfig, text: str, speaker: str):
     return audio_bytes.getvalue()
 
 
+@retry_with_exponential_backoff(max_retries=10, base_delay=2.0)
+@rate_limit_per_minute(max_requests_per_minute=20)
+def process_line_sixtydb(config: PodcastConfig, text: str, speaker: str):
+    """
+    Process a line of text into speech using the 60db TTS service.
+
+    Calls POST {base_url}/tts-synthesize with bearer auth. The response is a JSON
+    payload containing a base64-encoded audio blob, which is decoded and returned
+    as raw bytes.
+
+    Docs: https://docs.60db.ai/api-reference/tts/text-to-speech
+
+    Args:
+        config (PodcastConfig): Configuration object containing API key and settings
+        text (str): The text content to convert to speech
+        speaker (str): Speaker identifier to determine voice selection
+
+    Returns:
+        bytes: Raw audio bytes in the configured output format
+    """
+    if not config.sixtydb_api_key:
+        raise ValueError('SIXTYDB_API_KEY is not set; required for tts_provider=sixtydb')
+
+    tts_settings = config.tts_settings['sixtydb']
+    base_url = tts_settings.get('base_url', 'https://api.60db.ai').rstrip('/')
+
+    payload = {
+        'text': text,
+        'voice_id': tts_settings['voice_mapping'][speaker],
+        'enhance': tts_settings.get('enhance', True),
+        'speed': tts_settings.get('speed', 1.0),
+        'stability': tts_settings.get('stability', 50),
+        'similarity': tts_settings.get('similarity', 75),
+        'output_format': tts_settings.get('output_format', 'mp3'),
+    }
+
+    response = requests.post(
+        f'{base_url}/tts-synthesize',
+        json=payload,
+        headers={
+            'Authorization': f'Bearer {config.sixtydb_api_key}',
+            'Content-Type': 'application/json',
+        },
+        timeout=120,
+    )
+    response.raise_for_status()
+    body = response.json()
+
+    if not body.get('success', False):
+        raise RuntimeError(f"60db TTS failed: {body.get('message', 'unknown error')}")
+
+    audio_b64 = body.get('audio_base64')
+    if not audio_b64:
+        raise RuntimeError('60db TTS response missing audio_base64')
+
+    return base64.b64decode(audio_b64)
+
+
 def combine_consecutive_speaker_chunks(chunks: List[dict]) -> List[dict]:
     """
     Combine consecutive chunks from the same speaker into single chunks.
@@ -320,7 +380,8 @@ def convert_to_speech(
     tts_audio_formats = {
         'elevenlabs': 'mp3',
         'google': 'mp3',
-        'google_multispeaker': 'mp3'
+        'google_multispeaker': 'mp3',
+        'sixtydb': config.tts_settings.get('sixtydb', {}).get('output_format', 'mp3')
     }
 
     try:
@@ -352,6 +413,10 @@ def convert_to_speech(
                     audio = process_line_google(config, line['text'], line['speaker'])
                 elif config.tts_provider == 'elevenlabs':
                     audio = process_line_elevenlabs(config, line['text'], line['speaker'])
+                elif config.tts_provider == 'sixtydb':
+                    audio = process_line_sixtydb(config, line['text'], line['speaker'])
+                else:
+                    raise ValueError(f'Unsupported tts_provider: {config.tts_provider}')
 
                 logger.info(f"Saving audio chunk {counter}...")
                 file_name = os.path.join(temp_audio_dir, f"{counter:03d}.{tts_audio_formats[config.tts_provider]}")
