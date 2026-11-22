@@ -115,16 +115,17 @@ class PodcastConfig:
         # Load environment variables
         load_dotenv()
         
-        # Required API keys from env
+        # TTS credentials are checked by the selected backend when rendering.
+        config_dict = {
+            'google_api_key': os.getenv('GOOGLE_API_KEY', ''),
+            'elevenlabs_api_key': os.getenv('ELEVENLABS_API_KEY', ''),
+        }
         required_env_vars = [
-            'GOOGLE_API_KEY',
-            'ELEVENLABS_API_KEY', 
             'OPENAI_API_KEY',
             'TAVILY_API_KEY',
             'ANTHROPIC_API_KEY'
         ]
         
-        config_dict = {}
         for var in required_env_vars:
             value = os.getenv(var)
             if not value:

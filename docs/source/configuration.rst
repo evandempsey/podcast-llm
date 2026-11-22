@@ -23,12 +23,45 @@ LLM Configuration
 
 Text-to-Speech Configuration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~ 
-- ``tts_provider``: Text-to-speech service to use (options: 'google', 'elevenlabs')
+- ``tts_provider`` selects ``google``, ``google_multispeaker``, ``elevenlabs``,
+  ``elevenlabs_v4``, or ``gemini_3_8_flash_tts``.
 - ``tts_settings``: Provider-specific settings including:
    - Voice mappings for interviewer and interviewee
    - Model settings
    - Language codes
    - Audio effect profiles
+
+To use the Gemini dialogue backend, set ``GOOGLE_API_KEY`` for the Gemini API.
+Change either voice to a `Gemini voice name <https://ai.google.dev/gemini-api/docs/speech-generation#voices>`_
+in your YAML:
+
+.. code-block:: yaml
+
+   tts_provider: gemini_3_8_flash_tts
+   tts_settings:
+     gemini_3_8_flash_tts:
+       voice_mapping:
+         Interviewer: Aoede
+         Interviewee: Charon
+
+For Eleven v4 Text to Dialogue, set ``ELEVENLABS_API_KEY`` and use
+`ElevenLabs voice IDs <https://elevenlabs.io/docs/eleven-creative/voices/voice-library>`_:
+
+.. code-block:: yaml
+
+   tts_provider: elevenlabs_v4
+   tts_settings:
+     elevenlabs_v4:
+       voice_mapping:
+         Interviewer: iP95p4xoKVk53GoZ742B  # Chris
+         Interviewee: IKne3meq5aSn9XLyUdCD  # Charlie
+
+The listed voices are the defaults for the two dialogue backends. You can
+override either speaker independently. A custom Python entry point can also
+call ``podcast_llm.text_to_speech.register_tts_backend(name, render)`` before
+generating audio. The renderer takes the loaded configuration and the ordered
+speaker/text turns and yields ``AudioChunk`` objects with audio bytes and a file
+extension. Set ``tts_provider`` to the registered name.
 
 Audio Settings
 ~~~~~~~~~~~~
