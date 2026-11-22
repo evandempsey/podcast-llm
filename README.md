@@ -97,6 +97,10 @@ Listen to sample podcasts generated using Podcast-LLM:
 
 3. Customize voices and other settings in `config/config.yaml`
 
+   Select `gemini_3_8_flash_tts` or `elevenlabs_v4` for multi-speaker dialogue.
+   Set each speaker's voice under the matching `tts_settings` entry. See the
+   [configuration examples](docs/source/configuration.rst#text-to-speech-configuration).
+
 4. Launch the Gradio web interface:
    ```bash
    # Start the web UI

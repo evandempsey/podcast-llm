@@ -27,9 +27,10 @@ Typical usage:
 
 
 import logging
-import os
+from collections.abc import Callable, Iterable, Iterator
 from io import BytesIO
 from pathlib import Path
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import List
 
 from elevenlabs import client as elevenlabs_client
@@ -38,6 +39,12 @@ from google.cloud import texttospeech_v1beta1
 from pydub import AudioSegment
 
 from podcast_llm.config import PodcastConfig
+from podcast_llm.tts_backends import (
+    AudioChunk,
+    render_elevenlabs_v4,
+    render_gemini_3_8_flash_tts,
+    require_api_key,
+)
 from podcast_llm.utils.rate_limits import (
     rate_limit_per_minute,
     retry_with_exponential_backoff
@@ -93,17 +100,10 @@ def merge_audio_files(audio_files: List, output_file: str, audio_format: str) ->
         Exception: If there are any errors during the merging process
     """
     logger.info("Merging audio files...")
-    try:
-        combined = AudioSegment.empty()
-
-        for filename in audio_files:
-            audio = AudioSegment.from_file(filename)
-
-            combined += audio
-
-        combined.export(output_file, format=audio_format)
-    except Exception as e:
-        raise
+    combined = AudioSegment.empty()
+    for filename in audio_files:
+        combined += AudioSegment.from_file(filename)
+    combined.export(output_file, format=audio_format).close()
 
 
 @retry_with_exponential_backoff(max_retries=10, base_delay=2.0)
@@ -233,7 +233,7 @@ def process_lines_google_multispeaker(config: PodcastConfig, chunks: List):
     Process multiple lines of text into speech using Google's multi-speaker TTS service.
 
     Takes a chunk of conversation lines and generates synthesized speech using Google's
-    multi-speaker TTS service. Handles up to 6 turns of conversation at once for more
+    multi-speaker TTS service. Handles several turns of conversation at once for more
     natural conversational flow.
 
     Args:
@@ -290,95 +290,80 @@ def process_lines_google_multispeaker(config: PodcastConfig, chunks: List):
     return response.audio_content
 
 
+def _render_lines(config, turns, render_line) -> Iterator[AudioChunk]:
+    for turn in turns:
+        yield AudioChunk(render_line(config, turn['text'], turn['speaker']), 'mp3')
+
+
+def _render_google(config, turns) -> Iterator[AudioChunk]:
+    require_api_key(config.google_api_key, 'GOOGLE_API_KEY')
+    return _render_lines(config, turns, process_line_google)
+
+
+def _render_elevenlabs(config, turns) -> Iterator[AudioChunk]:
+    require_api_key(config.elevenlabs_api_key, 'ELEVENLABS_API_KEY')
+    return _render_lines(config, turns, process_line_elevenlabs)
+
+
+def _render_google_multispeaker(config, turns) -> Iterator[AudioChunk]:
+    require_api_key(config.google_api_key, 'GOOGLE_API_KEY')
+    for start in range(0, len(turns), 4):
+        yield AudioChunk(process_lines_google_multispeaker(config, turns[start:start + 4]), 'mp3')
+
+
+TTSRenderer = Callable[[PodcastConfig, list[dict[str, str]]], Iterable[AudioChunk]]
+_TTS_BACKENDS: dict[str, TTSRenderer] = {
+    'google': _render_google,
+    'elevenlabs': _render_elevenlabs,
+    'google_multispeaker': _render_google_multispeaker,
+    'elevenlabs_v4': render_elevenlabs_v4,
+    'gemini_3_8_flash_tts': render_gemini_3_8_flash_tts,
+}
+
+
+def register_tts_backend(name: str, render: TTSRenderer) -> None:
+    """Register a renderer for use by the tts_provider setting in the current process."""
+    if name in _TTS_BACKENDS:
+        raise ValueError(f"TTS backend {name!r} is already registered")
+    _TTS_BACKENDS[name] = render
+
+
 def convert_to_speech(
         config: PodcastConfig,
-        conversation: str, 
-        output_file: str, 
-        temp_audio_dir: str, 
+        conversation: list[dict[str, str]],
+        output_file: str,
+        temp_audio_dir: str,
         audio_format: str) -> None:
-    """
-    Convert a conversation script to speech audio using Google Text-to-Speech API.
+    """Render a conversation with the configured backend and assemble the audio."""
+    render = _TTS_BACKENDS.get(config.tts_provider)
+    if render is None:
+        names = ', '.join(sorted(_TTS_BACKENDS))
+        raise ValueError(f"Unknown tts_provider {config.tts_provider!r}. Available backends are {names}")
 
-    Takes a conversation script consisting of speaker/text pairs and generates audio files
-    for each line using Google's TTS service. The individual audio files are then merged
-    into a single output file. Uses different voices for different speakers to create a
-    natural conversational feel.
-
-    Args:
-        conversation (str): List of dictionaries containing conversation lines with structure:
-            {
-                'speaker': str,  # Speaker identifier ('Interviewer' or 'Interviewee')
-                'text': str      # Line content to convert to speech
-            }
-        output_file (str): Path where the final merged audio file should be saved
-        temp_audio_dir (str): Directory path for temporary audio file storage
-        audio_format (str): Format of the audio files (e.g. 'mp3')
-
-    Raises:
-        Exception: If any errors occur during TTS conversion or file operations
-    """
-    tts_audio_formats = {
-        'elevenlabs': 'mp3',
-        'google': 'mp3',
-        'google_multispeaker': 'mp3'
-    }
-
-    try:
-        logger.info(f"Generating audio files for {len(conversation)} lines...")
+    Path(temp_audio_dir).mkdir(parents=True, exist_ok=True)
+    output = Path(output_file)
+    with TemporaryDirectory(prefix='tts-', dir=temp_audio_dir) as work_dir:
         audio_files = []
-        counter = 0
+        for index, audio in enumerate(render(config, conversation)):
+            path = Path(work_dir) / f"{index:03d}.{audio.extension}"
+            path.write_bytes(audio.data)
+            audio_files.append(str(path))
+        if not audio_files:
+            raise ValueError(f"TTS backend {config.tts_provider!r} did not produce audio")
 
-        if config.tts_provider == 'google_multispeaker':
-            # We will not use a line by line strategy. 
-            # Instead we will process in chunks of 6.
-            # Process conversation in chunks of 6 lines
-            for chunk_start in range(0, len(conversation), 4):
-                chunk = conversation[chunk_start:chunk_start + 4]
-                logger.info(f"Processing chunk {counter} with {len(chunk)} lines...")
-                
-                audio = process_lines_google_multispeaker(config, chunk)
-                
-                file_name = os.path.join(temp_audio_dir, f"{counter:03d}.{tts_audio_formats[config.tts_provider]}")
-                with open(file_name, "wb") as out:
-                    out.write(audio)
-                audio_files.append(file_name)
-                
-                counter += 1
-        else:
-            for line in conversation:
-                logger.info(f"Generating audio for line {counter}...")
-
-                if config.tts_provider == 'google':
-                    audio = process_line_google(config, line['text'], line['speaker'])
-                elif config.tts_provider == 'elevenlabs':
-                    audio = process_line_elevenlabs(config, line['text'], line['speaker'])
-
-                logger.info(f"Saving audio chunk {counter}...")
-                file_name = os.path.join(temp_audio_dir, f"{counter:03d}.{tts_audio_formats[config.tts_provider]}")
-                with open(file_name, "wb") as out:
-                    out.write(audio)
-                audio_files.append(file_name)
-
-                counter += 1
-
-        # Merge all audio files and save the result
-        merge_audio_files(audio_files, output_file, audio_format)
-
-        # Clean up individual audio files
-        for file in audio_files:
-            os.remove(file)
-
-    except Exception as e:
-        raise
+        # Stage the export beside its destination so the final replacement is atomic.
+        with NamedTemporaryFile(dir=output.parent, suffix=output.suffix, delete=False) as staged:
+            export = Path(staged.name)
+        try:
+            merge_audio_files(audio_files, str(export), audio_format)
+            export.replace(output)
+        finally:
+            export.unlink(missing_ok=True)
 
 
 def generate_audio(config: PodcastConfig, final_script: list, output_file: str) -> str:
     """
-    Generate audio from a podcast script using text-to-speech.
-
-    Takes a final script consisting of speaker/text pairs and generates a single audio file
-    using Google's Text-to-Speech service. The script is first cleaned and processed to be
-    TTS-friendly, then converted to speech with different voices for different speakers.
+    Generate an audio file from a podcast script using the configured backend.
 
     Args:
         final_script (list): List of dictionaries containing script lines with structure:
@@ -396,8 +381,6 @@ def generate_audio(config: PodcastConfig, final_script: list, output_file: str) 
     """
     cleaned_script = clean_text_for_tts(final_script)
 
-    temp_audio_dir = Path(config.temp_audio_dir)
-    temp_audio_dir.mkdir(parents=True, exist_ok=True)
     convert_to_speech(config, cleaned_script, output_file, config.temp_audio_dir, config.output_format)
 
     return output_file
