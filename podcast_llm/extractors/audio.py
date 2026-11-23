@@ -67,13 +67,14 @@ class AudioSourceDocument(BaseSourceDocument):
     """
     def __init__(self, source: str) -> None:
         """
-        Initialize the PDF extractor.
+        Initialize the audio extractor.
 
         Args:
-            source: Path to the PDF file to extract text from
+            source: Path to the audio file to transcribe
         """
         self.src = source
-        self.src_type = 'PDF File'
+        # Set the type of the source document to indicate an audio file
+        self.src_type = 'Audio File'
         self.title = f"{self.src_type}: {source}"
         self.content: Optional[str] = None
 
