@@ -20,12 +20,12 @@ LLM Configuration
 ~~~~~~~~~~~~~~~
 - ``fast_llm_provider``: Provider for quick LLM operations (options: 'openai', 'google', 'anthropic')
 - ``long_context_llm_provider``: Provider for operations requiring longer context
-- ``context_writer_provider``: Choose ``google`` (default), ``openai``, or
-  ``anthropic``. Set ``GOOGLE_API_KEY``, ``OPENAI_API_KEY``, or
-  ``ANTHROPIC_API_KEY`` for the provider you choose.
+- ``context_writer_provider``: Choose ``anthropic`` (default), ``google``, or
+  ``openai``. Set ``ANTHROPIC_API_KEY``, ``GOOGLE_API_KEY``, or
+  ``OPENAI_API_KEY`` for the provider you choose.
 - ``context_writer_model``: Optional override for a model that supports native
-  structured output. The provider defaults are ``gemini-4-neon``,
-  ``gpt-6.2-sol``, and ``claude-sonnet-5-5``, respectively.
+  structured output. The provider defaults are ``claude-sonnet-5-5``,
+  ``gemini-4-neon``, and ``gpt-6.2-sol``, respectively.
 - ``context_editor_provider`` and ``context_editor_model``: Set either option to
   add a second editorial pass. The editor uses the writer's provider when its
   provider is omitted, and uses the selected provider's default model when its

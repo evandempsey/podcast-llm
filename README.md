@@ -82,9 +82,10 @@ Listen to sample podcasts generated using Podcast-LLM:
      --text-output podcast.md --audio-output podcast.mp3
    ```
 
-   Context mode writes a chaptered script with source references. Choose `google`,
-   `openai`, or `anthropic` with `context_writer_provider` in YAML and set its API
-   key. You can override the model or add an editorial pass using the
+   Context mode uses Claude Sonnet 5.5 and `ANTHROPIC_API_KEY` by default to write
+   a chaptered script with source references. Select `google` or `openai` with
+   `context_writer_provider` in YAML to switch providers. You can override the
+   model or add an editorial pass using the
    [configuration options](docs/source/configuration.rst#llm-configuration).
 
 2. Options:

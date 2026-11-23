@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from podcast_llm.generate import generate
+from podcast_llm.generate import DEFAULT_CONFIG_PATH, generate
 
 
 REQUEST_PATH = 'podcast_llm.context_backends.requests.post'
@@ -43,7 +43,10 @@ def gemini_response(episode):
 def test_context_mode_writes_edits_and_caches_by_source_content(tmp_path, context_config, mocker):
     config_path = Path(context_config)
     with config_path.open('a') as config_file:
-        config_file.write('context_writer_model: gemini-4-argon\ncontext_editor_model: gemini-4-neon\n')
+        config_file.write(
+            'context_writer_provider: google\ncontext_writer_model: gemini-4-argon\n'
+            'context_editor_model: gemini-4-neon\n'
+        )
     source = tmp_path / 'facts.md'
     source.write_text('Schemas can require object fields.')
     transcript = tmp_path / 'transcript.md'
@@ -88,25 +91,32 @@ def test_context_mode_writes_edits_and_caches_by_source_content(tmp_path, contex
     assert request.call_count == 4
 
 
-def test_context_mode_defaults_to_a_single_model(tmp_path, context_config, mocker):
+@pytest.mark.parametrize('bundled_config', [False, True], ids=['provider-omitted', 'bundled-config'])
+def test_context_mode_defaults_to_sonnet_in_one_pass(tmp_path, context_config, monkeypatch, mocker, bundled_config):
+    monkeypatch.delenv('GOOGLE_API_KEY')
+    monkeypatch.setenv('ANTHROPIC_API_KEY', 'test-anthropic-key')
     source = tmp_path / 'facts.txt'
     source.write_text('Schemas can require object fields.')
     episode = make_episode()
     episode['chapters'][0]['turns'].insert(1, {
         'speaker': 'Interviewee', 'text': 'Oh, you mean the shape?', 'source_ids': [],
     })
-    request = mocker.patch(REQUEST_PATH, return_value=gemini_response(episode))
+    request = mocker.patch(REQUEST_PATH, return_value=anthropic_response(episode))
     audio = mocker.patch('podcast_llm.generate.generate_audio')
 
-    generate('JSON Schema', 'context', [str(source)], config=context_config,
-             audio_output=str(tmp_path / 'episode.wav'))
+    config = DEFAULT_CONFIG_PATH if bundled_config else context_config
+    generate('JSON Schema', 'context', [str(source)], config=config,
+             use_checkpoints=False, audio_output=str(tmp_path / 'episode.wav'))
 
     request.assert_called_once()
-    assert request.call_args.args[0].endswith('/gemini-4-neon:generateContent')
+    assert request.call_args.args[0] == 'https://api.anthropic.com/v1/messages'
+    assert request.call_args.kwargs['json']['model'] == 'claude-sonnet-5-5'
     assert audio.call_args.args[1][1] == {'speaker': 'Interviewee', 'text': 'Oh, you mean the shape?'}
 
 
 def test_context_mode_rejects_unknown_citation(tmp_path, context_config, mocker):
+    with Path(context_config).open('a') as config_file:
+        config_file.write('context_writer_provider: google\n')
     source = tmp_path / 'facts.txt'
     source.write_text('Schemas can require object fields.')
     request = mocker.patch(REQUEST_PATH, return_value=gemini_response(make_episode('S2')))
