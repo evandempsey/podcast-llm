@@ -109,7 +109,17 @@ Listen to sample podcasts generated using Podcast-LLM:
    Set each speaker's voice under the matching `tts_settings` entry. See the
    [configuration examples](docs/source/configuration.rst#text-to-speech-configuration).
 
-4. Launch the Gradio web interface:
+4. Render a saved Markdown transcript:
+
+   ```bash
+   podcast-llm render podcast.md --config voices.yaml --output podcast.wav
+   ```
+
+   Run the same command again after an interruption or script edit. Completed
+   speech batches are stored under `checkpoint_dir/audio` by chapter. Use
+   `--cache-dir` to choose a different location.
+
+5. Launch the Gradio web interface:
    ```bash
    # Start the web UI
    podcast-llm-gui

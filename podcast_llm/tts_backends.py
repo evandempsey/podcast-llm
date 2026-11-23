@@ -3,7 +3,7 @@
 import base64
 import textwrap
 import wave
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from io import BytesIO
 from typing import NamedTuple
 
@@ -15,6 +15,19 @@ from podcast_llm.config import PodcastConfig
 class AudioChunk(NamedTuple):
     data: bytes
     extension: str
+
+
+class AudioBatch(NamedTuple):
+    chunks: tuple[AudioChunk, ...]
+    request_id: str | None = None
+
+
+BatchRunner = Callable[[list[dict[str, str]], Callable[[], AudioBatch], str | None], AudioBatch]
+
+
+def synthesize_batch(turns, synthesize, previous_request_id) -> AudioBatch:
+    """Run a synthesis request directly when no cache is in use."""
+    return synthesize()
 
 
 # Keep exchanges together while bounding the size of each synthesis request.
@@ -55,7 +68,29 @@ def _voice_mapping(settings, turns, defaults):
     return voices
 
 
-def render_elevenlabs_v4(config: PodcastConfig, turns: list[dict[str, str]]) -> Iterator[AudioChunk]:
+def _elevenlabs_dialogue(session, key: str, payload: dict) -> AudioBatch:
+    response = session.post(
+        'https://api.elevenlabs.io/v1/text-to-dialogue',
+        headers={'xi-api-key': key},
+        params={'output_format': 'pcm_24000'},
+        json=payload,
+        timeout=(10, 120),
+    )
+    response.raise_for_status()
+    pcm = response.content
+    if not pcm or len(pcm) % 2 or not response.headers.get('content-type', '').startswith('audio/'):
+        raise ValueError('ElevenLabs did not return 16-bit PCM audio')
+
+    audio = BytesIO()
+    with wave.open(audio, 'wb') as output:
+        output.setparams((1, 2, 24000, 0, 'NONE', 'not compressed'))
+        output.writeframes(pcm)
+    return AudioBatch((AudioChunk(audio.getvalue(), 'wav'),), response.headers.get('request-id'))
+
+
+def render_elevenlabs_v4(
+    config: PodcastConfig, turns: list[dict[str, str]], *, run_batch: BatchRunner = synthesize_batch,
+) -> Iterator[AudioChunk]:
     """Synthesize consecutive exchanges with Eleven v4 Text to Dialogue."""
     key = require_api_key(config.elevenlabs_api_key, 'ELEVENLABS_API_KEY')
     settings = config.tts_settings.get('elevenlabs_v4', {})
@@ -78,27 +113,45 @@ def render_elevenlabs_v4(config: PodcastConfig, turns: list[dict[str, str]]) -> 
                 payload['language_code'] = settings['language_code']
             if previous_request_id:
                 payload['previous_request_ids'] = [previous_request_id]
-            response = session.post(
-                'https://api.elevenlabs.io/v1/text-to-dialogue',
-                headers={'xi-api-key': key},
-                params={'output_format': 'pcm_24000'},
-                json=payload,
-                timeout=(10, 120),
-            )
-            response.raise_for_status()
-            pcm = response.content
-            if not pcm or len(pcm) % 2 or not response.headers.get('content-type', '').startswith('audio/'):
-                raise ValueError('ElevenLabs did not return 16-bit PCM audio')
-            previous_request_id = response.headers.get('request-id')
-
-            audio = BytesIO()
-            with wave.open(audio, 'wb') as output:
-                output.setparams((1, 2, 24000, 0, 'NONE', 'not compressed'))
-                output.writeframes(pcm)
-            yield AudioChunk(audio.getvalue(), 'wav')
+            batch = run_batch(chunk, lambda: _elevenlabs_dialogue(session, key, payload), previous_request_id)
+            previous_request_id = batch.request_id
+            yield from batch.chunks
 
 
-def render_gemini_3_8_flash_tts(config: PodcastConfig, turns: list[dict[str, str]]) -> Iterator[AudioChunk]:
+def _gemini_dialogue(session, key: str, content: list[dict], speech_config: dict | list) -> AudioBatch:
+    response = session.post(
+        'https://generativelanguage.googleapis.com/v1beta/interactions',
+        headers={'x-goog-api-key': key},
+        json={
+            'model': 'gemini-3.8-flash-tts',
+            'store': False,
+            'input': [{'type': 'user_input', 'content': content}],
+            'response_format': {'type': 'audio'},
+            'generation_config': {'speech_config': speech_config},
+        },
+        timeout=(10, 120),
+    )
+    response.raise_for_status()
+    result = response.json()
+    if result.get('status') != 'completed':
+        raise ValueError(f"Gemini speech generation ended with status {result.get('status')!r}")
+    chunks = []
+    for step in result.get('steps', []):
+        for part in step.get('content', []):
+            if part.get('type') != 'audio' or not part.get('data'):
+                continue
+            audio = base64.b64decode(part['data'], validate=True)
+            if not audio.startswith(b'RIFF'):
+                raise ValueError('Gemini did not return WAV audio')
+            chunks.append(AudioChunk(audio, 'wav'))
+    if not chunks:
+        raise ValueError('Gemini did not return audio')
+    return AudioBatch(tuple(chunks))
+
+
+def render_gemini_3_8_flash_tts(
+    config: PodcastConfig, turns: list[dict[str, str]], *, run_batch: BatchRunner = synthesize_batch,
+) -> Iterator[AudioChunk]:
     """Synthesize Gemini 3.8 Flash TTS dialogue through the Gemini Developer API."""
     key = require_api_key(config.google_api_key, 'GOOGLE_API_KEY')
     settings = config.tts_settings.get('gemini_3_8_flash_tts', {})
@@ -122,32 +175,5 @@ def render_gemini_3_8_flash_tts(config: PodcastConfig, turns: list[dict[str, str
                     'annotations': [{'type': 'speech_metadata', 'speaker': turn['speaker']}],
                 } for turn in chunk]
 
-            response = session.post(
-                'https://generativelanguage.googleapis.com/v1beta/interactions',
-                headers={'x-goog-api-key': key},
-                json={
-                    'model': 'gemini-3.8-flash-tts',
-                    'store': False,
-                    'input': [{'type': 'user_input', 'content': content}],
-                    'response_format': {'type': 'audio'},
-                    'generation_config': {'speech_config': speech_config},
-                },
-                timeout=(10, 120),
-            )
-            response.raise_for_status()
-            result = response.json()
-            if result.get('status') != 'completed':
-                raise ValueError(f"Gemini speech generation ended with status {result.get('status')!r}")
-            audio_parts = [
-                part['data']
-                for step in result.get('steps', [])
-                for part in step.get('content', [])
-                if part.get('type') == 'audio' and part.get('data')
-            ]
-            if not audio_parts:
-                raise ValueError('Gemini did not return audio')
-            for part in audio_parts:
-                audio = base64.b64decode(part, validate=True)
-                if not audio.startswith(b'RIFF'):
-                    raise ValueError('Gemini did not return WAV audio')
-                yield AudioChunk(audio, 'wav')
+            batch = run_batch(chunk, lambda: _gemini_dialogue(session, key, content, speech_config), None)
+            yield from batch.chunks
