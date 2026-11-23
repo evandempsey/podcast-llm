@@ -5,12 +5,11 @@ import json
 import logging
 from pathlib import Path
 from typing import Literal
-from urllib.parse import quote
 
-import requests
 from pydantic import BaseModel, ConfigDict, Field
 
 from podcast_llm.config import PodcastConfig
+from podcast_llm.context_backends import CONTEXT_BACKENDS
 from podcast_llm.extractors import extract_content_from_sources
 from podcast_llm.models import ContextDocument, ScriptLine
 from podcast_llm.utils.checkpointer import Checkpointer
@@ -113,47 +112,32 @@ def load_context_documents(sources: list[str]) -> dict[str, ContextDocument]:
     return documents
 
 
-def _generate_episode(api_key: str, model: str, instructions: str, data: dict, max_output_tokens: int) -> ContextEpisode:
-    logger.info('Writing structured episode with %s', model)
-    generation_config = {
-        'responseMimeType': 'application/json',
-        'responseJsonSchema': ContextEpisode.model_json_schema(),
-        'maxOutputTokens': max_output_tokens,
-    }
-    if model.startswith('gemini-4-'):
-        generation_config['thinkingConfig'] = {'thinkingLevel': 'low'}
-    response = requests.post(
-        f'https://generativelanguage.googleapis.com/v1beta/models/{quote(model, safe="-._")}:generateContent',
-        headers={'x-goog-api-key': api_key},
-        json={
-            'systemInstruction': {'parts': [{'text': instructions}]},
-            'contents': [{'role': 'user', 'parts': [{'text': json.dumps(data, ensure_ascii=False)}]}],
-            'generationConfig': generation_config,
-        },
-        timeout=(10, 240),
-    )
-    response.raise_for_status()
-    result = response.json()
-    candidates = result.get('candidates', [])
-    if not candidates:
-        reason = result.get('promptFeedback', {}).get('blockReason', 'no candidate')
-        raise ValueError(f'Context writer {model} returned no episode ({reason})')
-    candidate = candidates[0]
-    if candidate.get('finishReason') != 'STOP':
-        raise ValueError(f"Context writer {model} stopped early ({candidate.get('finishReason')})")
-    content = ''.join(
-        part.get('text', '') for part in candidate['content']['parts'] if not part.get('thought')
-    )
-    return ContextEpisode.model_validate_json(content)
+def _select_model(config: PodcastConfig, provider: str, model: str | None) -> tuple[str, str]:
+    backend = CONTEXT_BACKENDS.get(provider)
+    if backend is None:
+        providers = ', '.join(sorted(CONTEXT_BACKENDS))
+        raise ValueError(f'Unknown context model provider {provider!r}. Available providers are {providers}')
+    if not getattr(config, backend.api_key_env.lower()):
+        raise ValueError(f'Set {backend.api_key_env} to use {provider} in context mode')
+    return provider, model or backend.default_model
 
 
-def _write_pass(config: PodcastConfig, model: str, prompt: str, brief: dict,
+def _write_pass(config: PodcastConfig, selection: tuple[str, str], prompt: str, brief: dict,
                 draft: ContextEpisode | None = None) -> ContextEpisode:
+    provider, model = selection
+    backend = CONTEXT_BACKENDS[provider]
     data = {'brief': brief}
     if draft is not None:
         data['draft'] = draft.model_dump()
     max_output_tokens = min(32768, max(16384, brief['target_words'] * 6))
-    episode = _generate_episode(config.google_api_key, model, prompt, data, max_output_tokens)
+    logger.info('Writing structured episode with %s (%s)', model, provider)
+    content = backend.generate(
+        getattr(config, backend.api_key_env.lower()), model, prompt, json.dumps(data, ensure_ascii=False),
+        ContextEpisode.model_json_schema(), max_output_tokens,
+    )
+    if not content.strip():
+        raise ValueError(f'Context writer {model} returned no episode text')
+    episode = ContextEpisode.model_validate_json(content)
     allowed_ids = {source['id'] for source in brief['sources']}
     speakers = set()
     for chapter in episode.chapters:
@@ -176,8 +160,6 @@ def write_context_episode(
     target_minutes: int,
     use_checkpoints: bool,
 ) -> ContextEpisode:
-    if not config.google_api_key:
-        raise ValueError('Set GOOGLE_API_KEY to write a context episode')
     if not audience.strip() or target_minutes < 1:
         raise ValueError('Context episodes need an audience and a positive target runtime')
 
@@ -191,8 +173,12 @@ def write_context_episode(
             for source_id, doc in documents.items()
         ],
     }
-    writer = config.context_writer_model
-    editor = config.context_editor_model
+    writer = _select_model(config, config.context_writer_provider, config.context_writer_model)
+    editor = None
+    if config.context_editor_provider or config.context_editor_model:
+        editor = _select_model(
+            config, config.context_editor_provider or writer[0], config.context_editor_model,
+        )
     cache_inputs = [
         brief, writer, editor, WRITE_EPISODE, EDIT_EPISODE if editor else None,
         ContextEpisode.model_json_schema(),

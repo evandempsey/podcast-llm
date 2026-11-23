@@ -20,12 +20,25 @@ LLM Configuration
 ~~~~~~~~~~~~~~~
 - ``fast_llm_provider``: Provider for quick LLM operations (options: 'openai', 'google', 'anthropic')
 - ``long_context_llm_provider``: Provider for operations requiring longer context
-- ``context_writer_model``: Gemini Developer API text model that supports
-  structured output. ``gemini-4-neon`` writes both hosts in one pass by default.
-- ``context_editor_model``: Optional model for a second editorial pass.
+- ``context_writer_provider``: Choose ``google`` (default), ``openai``, or
+  ``anthropic``. Set ``GOOGLE_API_KEY``, ``OPENAI_API_KEY``, or
+  ``ANTHROPIC_API_KEY`` for the provider you choose.
+- ``context_writer_model``: Optional override for a model that supports native
+  structured output. The provider defaults are ``gemini-4-neon``,
+  ``gpt-6.2-sol``, and ``claude-sonnet-5-5``, respectively.
+- ``context_editor_provider`` and ``context_editor_model``: Set either option to
+  add a second editorial pass. The editor uses the writer's provider when its
+  provider is omitted, and uses the selected provider's default model when its
+  model is omitted.
 
-Context mode uses ``GOOGLE_API_KEY`` for writing and editing. Set the audience
-and target runtime in Gradio or with ``--audience`` and ``--target-minutes``.
+For example, write with OpenAI and edit with Anthropic:
+
+.. code-block:: yaml
+
+   context_writer_provider: openai
+   context_editor_provider: anthropic
+
+Set the audience and target runtime in Gradio or with ``--audience`` and ``--target-minutes``.
 The target runtime is approximate. The Markdown transcript includes chapters
 and references to the supplied sources. ``--qa-rounds`` applies in research mode.
 
