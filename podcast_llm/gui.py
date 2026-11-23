@@ -30,6 +30,7 @@ import gradio as gr
 from gradio_log import Log
 
 from .config.logging_config import setup_logging
+from .context_writer import DEFAULT_CONTEXT_AUDIENCE, DEFAULT_CONTEXT_MINUTES
 from .generate import generate
 
 PACKAGE_ROOT = Path(__file__).parent
@@ -47,7 +48,9 @@ def submit_handler(
     use_checkpoints: bool,
     custom_config_file: str | None,
     text_output: str,
-    audio_output: str
+    audio_output: str,
+    audience: str = DEFAULT_CONTEXT_AUDIENCE,
+    target_minutes: int = DEFAULT_CONTEXT_MINUTES,
 ) -> None:
     """
     Handle form submission for podcast generation.
@@ -65,6 +68,8 @@ def submit_handler(
         custom_config_file: Optional path to custom config file
         text_output: Path to save text output (optional)
         audio_output: Path to save audio output (optional)
+        audience: Intended listeners in context mode
+        target_minutes: Approximate spoken runtime in context mode
 
     Returns:
         None
@@ -105,7 +110,9 @@ def submit_handler(
         text_output=text_output_file,
         config=custom_config_file if custom_config_file else DEFAULT_CONFIG_PATH,
         debug=False,
-        log_file=temp_log_file
+        log_file=temp_log_file,
+        audience=audience,
+        target_minutes=target_minutes if target_minutes is not None else DEFAULT_CONTEXT_MINUTES,
     )
 
 def main():
@@ -135,7 +142,7 @@ def main():
         with gr.Row():
             topic_input = gr.Textbox(label='Topic')
             qa_rounds_input = gr.Number(
-                label='Number of rounds of Q&A per section',
+                label='Q&A rounds per section (research mode)',
                 value=1,
                 interactive=True,
                 minimum=1,
@@ -151,6 +158,16 @@ def main():
             value='research',
             interactive=True,
             show_label=False
+        )
+        with gr.Row(visible=False) as context_options:
+            audience_input = gr.Textbox(label='Audience', value=DEFAULT_CONTEXT_AUDIENCE)
+            target_minutes_input = gr.Number(
+                label='Target runtime (minutes)', value=DEFAULT_CONTEXT_MINUTES, minimum=1, precision=0,
+            )
+        mode_of_operation.change(
+            fn=lambda mode: gr.update(visible=mode == 'context'),
+            inputs=mode_of_operation,
+            outputs=context_options,
         )
 
         # Source Inputs Section
@@ -192,7 +209,9 @@ def main():
                 use_checkpoints_input,
                 custom_config_file_input,
                 text_output_input,
-                audio_output_input
+                audio_output_input,
+                audience_input,
+                target_minutes_input,
             ],
             outputs=[]
         )

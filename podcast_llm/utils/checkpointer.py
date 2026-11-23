@@ -25,6 +25,7 @@ to other serialization formats as needed.
 import logging
 from typing import Any, Callable
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 import pickle
 
 
@@ -130,7 +131,13 @@ class Checkpointer:
 
         # Save checkpoint
         logger.info(f'Saving checkpoint to {checkpoint_file}')
-        with open(checkpoint_file, 'wb') as f:
-            pickle.dump(result, f)
+        with NamedTemporaryFile(dir=self.checkpoint_dir, delete=False) as f:
+            temporary_file = Path(f.name)
+            try:
+                pickle.dump(result, f)
+                f.close()
+                temporary_file.replace(checkpoint_file)
+            finally:
+                temporary_file.unlink(missing_ok=True)
 
         return result

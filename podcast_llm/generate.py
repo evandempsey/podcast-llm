@@ -37,8 +37,14 @@ from podcast_llm.utils.checkpointer import (
 )
 from podcast_llm.text_to_speech import generate_audio
 from podcast_llm.config import PodcastConfig, setup_logging
+from podcast_llm.context_writer import (
+    DEFAULT_CONTEXT_AUDIENCE,
+    DEFAULT_CONTEXT_MINUTES,
+    format_context_transcript,
+    load_context_documents,
+    write_context_episode,
+)
 from podcast_llm.utils.text import generate_markdown_script
-from podcast_llm.extractors import extract_content_from_sources
 import logging
 
 
@@ -56,7 +62,9 @@ def generate(
     text_output: Optional[str] = None,
     config: str = DEFAULT_CONFIG_PATH,
     debug: bool = False,
-    log_file: Optional[str] = None
+    log_file: Optional[str] = None,
+    audience: str = DEFAULT_CONTEXT_AUDIENCE,
+    target_minutes: int = DEFAULT_CONTEXT_MINUTES,
 ) -> None:
     """
     Generate a podcast episode.
@@ -65,39 +73,42 @@ def generate(
         topic: Topic of the podcast
         mode: Generation mode - either 'research' or 'context'
         sources: List of URLs and file paths to use as source material (for context mode)
-        qa_rounds: Number of Q&A rounds
+        qa_rounds: Number of Q&A rounds in research mode
         use_checkpoints: Whether to use checkpointing
         audio_output: Path to save audio output
         text_output: Path to save text output
         config: Path to config file
         debug: Whether to enable debug logging
         log_file: Log output file
+        audience: Intended listeners in context mode
+        target_minutes: Approximate spoken runtime in context mode
     """
     log_level = logging.DEBUG if debug else logging.INFO
     setup_logging(log_level, output_file=log_file)
     
-    config = PodcastConfig.load(yaml_path=config)
+    config = PodcastConfig.load(yaml_path=config, require_research_credentials=mode == 'research')
+
+    if mode == 'context':
+        if not sources:
+            raise ValueError('Sources must be provided when using context mode')
+        documents = load_context_documents(sources)
+        episode = write_context_episode(config, topic, documents, audience, target_minutes, use_checkpoints)
+        if text_output:
+            Path(text_output).write_text(format_context_transcript(episode, documents), encoding='utf-8')
+        if audio_output:
+            generate_audio(config, episode.speech_script(), audio_output)
+        return
 
     checkpointer = Checkpointer(
         checkpoint_key=f"{to_snake_case(topic)}_qa_{qa_rounds}_",
         enabled=use_checkpoints
     )
 
-    # Get background info based on mode
-    if mode == 'research':
-        background_info = checkpointer.checkpoint(
-            research_background_info,
-            [config, topic],
-            stage_name='background_info'
-        )
-    else:  # context mode
-        if not sources:
-            raise ValueError("Sources must be provided when using context mode")
-        background_info = checkpointer.checkpoint(
-            extract_content_from_sources,
-            [sources],
-            stage_name='background_info'
-        )
+    background_info = checkpointer.checkpoint(
+        research_background_info,
+        [config, topic],
+        stage_name='background_info'
+    )
 
     outline = checkpointer.checkpoint(
         outline_episode,
@@ -105,15 +116,11 @@ def generate(
         stage_name='outline'
     )
 
-    # Get detailed info based on mode
-    if mode == 'research':
-        deep_info = checkpointer.checkpoint(
-            research_discussion_topics,
-            [config, topic, outline],
-            stage_name='deep_info'
-        )
-    else:
-        deep_info = background_info  # Use the same extracted content
+    deep_info = checkpointer.checkpoint(
+        research_discussion_topics,
+        [config, topic, outline],
+        stage_name='deep_info'
+    )
 
     draft_script = checkpointer.checkpoint(
         write_draft_script,
@@ -159,7 +166,18 @@ def parse_arguments() -> argparse.Namespace:
         '--qa-rounds',
         type=int,
         default=2,
-        help='Number of question-answer rounds per section'
+        help='Number of question-answer rounds per section in research mode'
+    )
+    parser.add_argument(
+        '--audience',
+        default=DEFAULT_CONTEXT_AUDIENCE,
+        help='Intended listeners in context mode'
+    )
+    parser.add_argument(
+        '--target-minutes',
+        type=int,
+        default=DEFAULT_CONTEXT_MINUTES,
+        help='Approximate spoken runtime in context mode'
     )
     parser.add_argument(
         '--checkpoint',
@@ -216,7 +234,9 @@ def main() -> None:
         audio_output=args.audio_output,
         text_output=args.text_output,
         config=args.config,
-        debug=args.debug
+        debug=args.debug,
+        audience=args.audience,
+        target_minutes=args.target_minutes,
     )
 
 
