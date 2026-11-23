@@ -82,9 +82,10 @@ Listen to sample podcasts generated using Podcast-LLM:
      --text-output podcast.md --audio-output podcast.mp3
    ```
 
-   Context mode writes a chaptered script with source references using the Gemini
-   API. Set `GOOGLE_API_KEY` and select a model with `context_writer_model` in
-   YAML. Set `context_editor_model` to add an optional second pass.
+   Context mode writes a chaptered script with source references. Choose `google`,
+   `openai`, or `anthropic` with `context_writer_provider` in YAML and set its API
+   key. You can override the model or add an editorial pass using the
+   [configuration options](docs/source/configuration.rst#llm-configuration).
 
 2. Options:
    ```bash

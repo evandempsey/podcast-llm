@@ -3,9 +3,10 @@ fast_llm_provider: openai   # Options: 'openai', 'google', 'anthropic'
 long_context_llm_provider: openai
 embeddings_model: openai
 
-# Context mode uses the Gemini Developer API to write both voices in one pass.
-context_writer_model: gemini-4-neon
-# Set context_editor_model to opt into an additional editorial pass.
+# Context mode writes both voices in one pass. Options: google, openai, anthropic.
+context_writer_provider: google
+# Set context_writer_model to override the provider's default model.
+# Set context_editor_provider or context_editor_model to add an editorial pass.
 
 # Text-to-Speech Configuration
 # Options: google, google_multispeaker, elevenlabs, elevenlabs_v4, gemini_3_8_flash_tts

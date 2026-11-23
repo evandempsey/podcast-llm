@@ -100,7 +100,9 @@ class PodcastConfig:
     intro: str
     outro: str
     episode_structure: List
-    context_writer_model: str = 'gemini-4-neon'
+    context_writer_provider: str = 'google'
+    context_writer_model: str | None = None
+    context_editor_provider: str | None = None
     context_editor_model: str | None = None
     
     @classmethod
