@@ -4,7 +4,7 @@ long_context_llm_provider: openai
 embeddings_model: openai
 
 # Context mode writes both voices in one pass. Options: google, openai, anthropic.
-context_writer_provider: google
+context_writer_provider: anthropic
 # Set context_writer_model to override the provider's default model.
 # Set context_editor_provider or context_editor_model to add an editorial pass.
 
