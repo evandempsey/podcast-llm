@@ -76,13 +76,19 @@ Listen to sample podcasts generated using Podcast-LLM:
    # Research mode (default) - automatically researches the topic
    podcast-llm "Artificial Intelligence"
 
-   # Context mode - uses provided sources
-   podcast-llm "Machine Learning" --mode context --sources paper.pdf https://example.com/article
+   # Context mode - write and render a source-grounded episode
+   podcast-llm "Machine Learning" --mode context --sources paper.pdf https://example.com/article \
+     --audience "Software developers new to ML" --target-minutes 6 \
+     --text-output podcast.md --audio-output podcast.mp3
    ```
+
+   Context mode writes a chaptered script with source references using the Gemini
+   API. Set `GOOGLE_API_KEY` and select a model with `context_writer_model` in
+   YAML. Set `context_editor_model` to add an optional second pass.
 
 2. Options:
    ```bash
-   # Customize number of Q&A rounds per section
+   # Customize number of Q&A rounds per section in research mode
    podcast-llm "Linux" --qa-rounds 3
 
    # Disable checkpointing

@@ -100,14 +100,17 @@ class PodcastConfig:
     intro: str
     outro: str
     episode_structure: List
+    context_writer_model: str = 'gemini-4-neon'
+    context_editor_model: str | None = None
     
     @classmethod
-    def load(cls, yaml_path: Optional[str] = None) -> 'PodcastConfig':
+    def load(cls, yaml_path: Optional[str] = None, *, require_research_credentials: bool = True) -> 'PodcastConfig':
         """
         Load configuration from .env and optional yaml file
         
         Args:
             yaml_path: Optional path to yaml config file
+            require_research_credentials: Require the credentials used by research mode
             
         Returns:
             PodcastConfig: Loaded configuration object
@@ -115,22 +118,19 @@ class PodcastConfig:
         # Load environment variables
         load_dotenv()
         
-        # TTS credentials are checked by the selected backend when rendering.
-        config_dict = {
-            'google_api_key': os.getenv('GOOGLE_API_KEY', ''),
-            'elevenlabs_api_key': os.getenv('ELEVENLABS_API_KEY', ''),
-        }
-        required_env_vars = [
+        research_credentials = (
             'OPENAI_API_KEY',
             'TAVILY_API_KEY',
-            'ANTHROPIC_API_KEY'
-        ]
-        
-        for var in required_env_vars:
-            value = os.getenv(var)
-            if not value:
-                raise ValueError(f'Missing required environment variable: {var}')
-            config_dict[var.lower()] = value
+            'ANTHROPIC_API_KEY',
+        )
+        config_dict = {
+            name.lower(): os.getenv(name, '')
+            for name in (*research_credentials, 'GOOGLE_API_KEY', 'ELEVENLABS_API_KEY')
+        }
+        if require_research_credentials:
+            for name in research_credentials:
+                if not config_dict[name.lower()]:
+                    raise ValueError(f'Missing required environment variable: {name}')
             
         # Load and merge yaml config if provided
         if yaml_path:

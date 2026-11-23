@@ -20,6 +20,14 @@ LLM Configuration
 ~~~~~~~~~~~~~~~
 - ``fast_llm_provider``: Provider for quick LLM operations (options: 'openai', 'google', 'anthropic')
 - ``long_context_llm_provider``: Provider for operations requiring longer context
+- ``context_writer_model``: Gemini Developer API text model that supports
+  structured output. ``gemini-4-neon`` writes both hosts in one pass by default.
+- ``context_editor_model``: Optional model for a second editorial pass.
+
+Context mode uses ``GOOGLE_API_KEY`` for writing and editing. Set the audience
+and target runtime in Gradio or with ``--audience`` and ``--target-minutes``.
+The target runtime is approximate. The Markdown transcript includes chapters
+and references to the supplied sources. ``--qa-rounds`` applies in research mode.
 
 Text-to-Speech Configuration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~ 
