@@ -20,6 +20,7 @@ Example:
 
 import os
 import argparse
+import sys
 from pathlib import Path
 from typing import Optional, List, Literal
 from podcast_llm.research import (
@@ -145,7 +146,8 @@ def generate(
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description='Generate podcasts using LLMs and TTS'
+        description='Generate podcasts using LLMs and TTS',
+        epilog='Use "podcast-llm render --help" to render a saved script.',
     )
     parser.add_argument(
         'topic',
@@ -220,6 +222,11 @@ def parse_arguments() -> argparse.Namespace:
 
 def main() -> None:
     """Main entry point for the CLI."""
+    if sys.argv[1:2] == ['render']:
+        from podcast_llm.render import render_cli
+
+        render_cli(sys.argv[2:], DEFAULT_CONFIG_PATH)
+        return
     args = parse_arguments()
     
     if args.mode == 'context' and not args.sources:

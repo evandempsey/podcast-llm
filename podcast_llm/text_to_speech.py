@@ -40,10 +40,13 @@ from pydub import AudioSegment
 
 from podcast_llm.config import PodcastConfig
 from podcast_llm.tts_backends import (
+    AudioBatch,
     AudioChunk,
+    BatchRunner,
     render_elevenlabs_v4,
     render_gemini_3_8_flash_tts,
     require_api_key,
+    synthesize_batch,
 )
 from podcast_llm.utils.rate_limits import (
     rate_limit_per_minute,
@@ -290,25 +293,31 @@ def process_lines_google_multispeaker(config: PodcastConfig, chunks: List):
     return response.audio_content
 
 
-def _render_lines(config, turns, render_line) -> Iterator[AudioChunk]:
+def _render_mp3_batch(turns, synthesize, run_batch: BatchRunner) -> tuple[AudioChunk, ...]:
+    batch = run_batch(turns, lambda: AudioBatch((AudioChunk(synthesize(), 'mp3'),)), None)
+    return batch.chunks
+
+
+def _render_lines(config, turns, render_line, run_batch: BatchRunner) -> Iterator[AudioChunk]:
     for turn in turns:
-        yield AudioChunk(render_line(config, turn['text'], turn['speaker']), 'mp3')
+        yield from _render_mp3_batch([turn], lambda: render_line(config, turn['text'], turn['speaker']), run_batch)
 
 
-def _render_google(config, turns) -> Iterator[AudioChunk]:
+def _render_google(config, turns, *, run_batch: BatchRunner = synthesize_batch) -> Iterator[AudioChunk]:
     require_api_key(config.google_api_key, 'GOOGLE_API_KEY')
-    return _render_lines(config, turns, process_line_google)
+    return _render_lines(config, turns, process_line_google, run_batch)
 
 
-def _render_elevenlabs(config, turns) -> Iterator[AudioChunk]:
+def _render_elevenlabs(config, turns, *, run_batch: BatchRunner = synthesize_batch) -> Iterator[AudioChunk]:
     require_api_key(config.elevenlabs_api_key, 'ELEVENLABS_API_KEY')
-    return _render_lines(config, turns, process_line_elevenlabs)
+    return _render_lines(config, turns, process_line_elevenlabs, run_batch)
 
 
-def _render_google_multispeaker(config, turns) -> Iterator[AudioChunk]:
+def _render_google_multispeaker(config, turns, *, run_batch: BatchRunner = synthesize_batch) -> Iterator[AudioChunk]:
     require_api_key(config.google_api_key, 'GOOGLE_API_KEY')
     for start in range(0, len(turns), 4):
-        yield AudioChunk(process_lines_google_multispeaker(config, turns[start:start + 4]), 'mp3')
+        batch = turns[start:start + 4]
+        yield from _render_mp3_batch(batch, lambda: process_lines_google_multispeaker(config, batch), run_batch)
 
 
 TTSRenderer = Callable[[PodcastConfig, list[dict[str, str]]], Iterable[AudioChunk]]
@@ -319,6 +328,7 @@ _TTS_BACKENDS: dict[str, TTSRenderer] = {
     'elevenlabs_v4': render_elevenlabs_v4,
     'gemini_3_8_flash_tts': render_gemini_3_8_flash_tts,
 }
+_BATCH_AWARE_BACKENDS = frozenset(_TTS_BACKENDS)
 
 
 def register_tts_backend(name: str, render: TTSRenderer) -> None:
@@ -328,6 +338,35 @@ def register_tts_backend(name: str, render: TTSRenderer) -> None:
     _TTS_BACKENDS[name] = render
 
 
+def render_audio_chunks(
+    config: PodcastConfig, conversation: list[dict[str, str]], run_batch: BatchRunner | None = None,
+) -> Iterator[AudioChunk]:
+    """Render audio in order, optionally saving or reusing individual requests."""
+    render = _TTS_BACKENDS.get(config.tts_provider)
+    if render is None:
+        names = ', '.join(sorted(_TTS_BACKENDS))
+        raise ValueError(f"Unknown tts_provider {config.tts_provider!r}. Available backends are {names}")
+    if run_batch is None:
+        yield from render(config, conversation)
+    elif config.tts_provider in _BATCH_AWARE_BACKENDS:
+        yield from render(config, conversation, run_batch=run_batch)
+    else:
+        # A registered renderer can synthesize its whole chapter as one cache entry.
+        batch = run_batch(conversation, lambda: AudioBatch(tuple(render(config, conversation))), None)
+        yield from batch.chunks
+
+
+def export_audio_files(audio_files: list[str], output: Path, audio_format: str) -> None:
+    """Assemble into a temporary file and replace the destination on success."""
+    with NamedTemporaryFile(dir=output.parent, suffix=output.suffix, delete=False) as staged:
+        export = Path(staged.name)
+    try:
+        merge_audio_files(audio_files, str(export), audio_format)
+        export.replace(output)
+    finally:
+        export.unlink(missing_ok=True)
+
+
 def convert_to_speech(
         config: PodcastConfig,
         conversation: list[dict[str, str]],
@@ -335,30 +374,19 @@ def convert_to_speech(
         temp_audio_dir: str,
         audio_format: str) -> None:
     """Render a conversation with the configured backend and assemble the audio."""
-    render = _TTS_BACKENDS.get(config.tts_provider)
-    if render is None:
-        names = ', '.join(sorted(_TTS_BACKENDS))
-        raise ValueError(f"Unknown tts_provider {config.tts_provider!r}. Available backends are {names}")
 
     Path(temp_audio_dir).mkdir(parents=True, exist_ok=True)
     output = Path(output_file)
     with TemporaryDirectory(prefix='tts-', dir=temp_audio_dir) as work_dir:
         audio_files = []
-        for index, audio in enumerate(render(config, conversation)):
+        for index, audio in enumerate(render_audio_chunks(config, conversation)):
             path = Path(work_dir) / f"{index:03d}.{audio.extension}"
             path.write_bytes(audio.data)
             audio_files.append(str(path))
         if not audio_files:
             raise ValueError(f"TTS backend {config.tts_provider!r} did not produce audio")
 
-        # Stage the export beside its destination so the final replacement is atomic.
-        with NamedTemporaryFile(dir=output.parent, suffix=output.suffix, delete=False) as staged:
-            export = Path(staged.name)
-        try:
-            merge_audio_files(audio_files, str(export), audio_format)
-            export.replace(output)
-        finally:
-            export.unlink(missing_ok=True)
+        export_audio_files(audio_files, output, audio_format)
 
 
 def generate_audio(config: PodcastConfig, final_script: list, output_file: str) -> str:

@@ -33,6 +33,27 @@ Here's how to use the Podcast LLM system:
       podcast-llm "Machine Learning" --text-output podcast.md
 
 
+Render a Saved Script
+---------------------
+
+Pass a Markdown transcript produced by ``--text-output`` to ``render``:
+
+.. code-block:: bash
+
+   podcast-llm render episode.md --config voices.yaml --output episode.wav
+
+The command reads the speaker turns under ``## Script``. Chapter headings
+group the turns, and trailing source references stay in the transcript.
+The output path may end in ``.wav`` or ``.mp3``. If omitted, the audio file
+is written beside the transcript using the configured output format.
+
+Run the command again after an interruption. It reuses completed batches and
+synthesizes the remaining dialogue. Editing a chapter invalidates that chapter's
+audio. Changing the speech provider or its settings selects a different cache.
+The cache lives under ``checkpoint_dir/audio``, which you can override with
+``--cache-dir``.
+
+
 Configuration
 ------------
 
