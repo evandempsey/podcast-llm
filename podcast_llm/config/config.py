@@ -104,6 +104,7 @@ class PodcastConfig:
     context_writer_model: str | None = None
     context_editor_provider: str | None = None
     context_editor_model: str | None = None
+    audio_qa_model: str = 'gpt-transcribe'
     
     @classmethod
     def load(cls, yaml_path: Optional[str] = None, *, require_research_credentials: bool = True) -> 'PodcastConfig':

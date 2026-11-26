@@ -44,14 +44,46 @@ Pass a Markdown transcript produced by ``--text-output`` to ``render``:
 
 The command reads the speaker turns under ``## Script``. Chapter headings
 group the turns, and trailing source references stay in the transcript.
-The output path may end in ``.wav`` or ``.mp3``. If omitted, the audio file
-is written beside the transcript using the configured output format.
+The output path may end in ``.wav`` or ``.mp3``. By default, a full render writes
+audio beside the transcript using the configured output format.
+
+To preview a chapter, edit its dialogue in the Markdown file, list the chapters,
+then render the chapter by number:
+
+.. code-block:: bash
+
+   podcast-llm render episode.md --list-chapters
+   podcast-llm render episode.md --chapter 2 --config voices.yaml
+
+Listing chapters requires no provider credentials. A chapter render defaults to
+``episode.chapter-2.wav`` in this example. Use ``--output`` to change its path.
+The full render and Gradio can reuse the preview audio when the dialogue, speech
+settings, and cache directory match.
 
 Run the command again after an interruption. It reuses completed batches and
 synthesizes the remaining dialogue. Editing a chapter invalidates that chapter's
 audio. Changing the speech provider or its settings selects a different cache.
 The cache lives under ``checkpoint_dir/audio``, which you can override with
 ``--cache-dir``.
+
+Check or Retake a Chapter
+-------------------------
+
+.. code-block:: bash
+
+   podcast-llm check episode.md --chapter 2 --config voices.yaml
+   podcast-llm render episode.md --chapter 2 --retake --config voices.yaml
+
+The check sends the chapter preview to OpenAI for transcription and flags
+likely missing dialogue or changed words for review. It requires
+``OPENAI_API_KEY`` and uses ``gpt-transcribe`` by default. Set ``audio_qa_model``
+in YAML to override the model. Use ``--audio`` to check a different recording
+of the chapter. The command exits with status 1 when it finds issues, or 2 when
+it cannot complete the check.
+
+A retake synthesizes the selected chapter again with the same speech settings.
+Once it succeeds, full renders use that take and reuse the other chapters.
+An interrupted retake leaves the previous take available for export.
 
 
 Configuration
@@ -75,7 +107,9 @@ topic or source files, use **Draft script for editing** on the **Generate** tab.
 1. Choose a chapter and edit its dialogue. Keep the speaker labels and any
    source references in the Markdown.
 2. Click **Render chapter** and press **Play** to hear the edited chapter.
-3. Click **Export episode** to download the complete audio and edited Markdown.
+3. Click **Check audio** to compare the preview against the script. Use **Retake
+   chapter** to request fresh audio with the same dialogue and voices.
+4. Click **Export episode** to download the complete audio and edited Markdown.
 
 The editor uses the same audio cache as the render command. A full export
 reuses any chapter audio already saved for its dialogue and speech settings.

@@ -21,6 +21,7 @@ provides real-time feedback during the generation process.
 """
 
 
+from functools import partial
 import logging
 import os
 from pathlib import Path
@@ -32,7 +33,9 @@ from gradio_log import Log
 from .config.logging_config import setup_logging
 from .context_writer import DEFAULT_CONTEXT_AUDIENCE, DEFAULT_CONTEXT_MINUTES
 from .generate import generate
-from .gui_editor import close_editor, export_episode, open_transcript, render_chapter_preview, select_chapter
+from .gui_editor import (
+    check_chapter_preview, close_editor, export_episode, open_transcript, render_chapter_preview, select_chapter,
+)
 
 PACKAGE_ROOT = Path(__file__).parent
 DEFAULT_CONFIG_PATH = os.path.join(PACKAGE_ROOT, 'config', 'config.yaml')
@@ -145,8 +148,11 @@ def build_interface() -> gr.Blocks:
                     dialogue = gr.Textbox(label='Chapter dialogue', lines=14, interactive=True)
                     with gr.Row():
                         preview = gr.Button('Render chapter', variant='primary')
+                        check = gr.Button('Check audio')
+                        retake = gr.Button('Retake chapter')
                         export = gr.Button('Export episode')
                     audio = gr.Audio(label='Chapter preview', interactive=False, format='wav')
+                    report = gr.Textbox(label='Audio check', lines=3, interactive=False)
                     with gr.Row():
                         audio_download = gr.File(label='Episode audio', interactive=False)
                         transcript_download = gr.File(label='Edited transcript', interactive=False)
@@ -189,7 +195,12 @@ def build_interface() -> gr.Blocks:
             open_transcript, [saved_script, state], editor_outputs, api_name='open_transcript',
         )
         chapter.input(select_chapter, [state, chapter, dialogue], [state, chapter, dialogue, audio])
-        preview.click(render_chapter_preview, [state, dialogue, config], [state, audio], api_name='render_chapter')
+        chapter_inputs = [state, dialogue, config]
+        preview.click(render_chapter_preview, chapter_inputs, [state, audio], api_name='render_chapter')
+        check.click(check_chapter_preview, chapter_inputs, report, api_name='check_audio')
+        retake.click(partial(render_chapter_preview, retake=True), chapter_inputs, [state, audio], api_name='retake')
+        audio.change(lambda: None, outputs=report, api_name=False, queue=False)
+        dialogue.input(lambda: None, outputs=report, api_name=False, queue=False)
         export.click(
             export_episode, [state, dialogue, config], [state, audio_download, transcript_download],
             api_name='export_episode',

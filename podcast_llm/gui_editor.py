@@ -8,9 +8,10 @@ from typing import NamedTuple
 
 import gradio as gr
 
+from podcast_llm.audio_qa import check_chapter_audio, format_audio_check
 from podcast_llm.config import PodcastConfig
 from podcast_llm.generate import DEFAULT_CONFIG_PATH
-from podcast_llm.render import MarkdownScript, parse_chapter, read_transcript, render_chapters
+from podcast_llm.render import MarkdownScript, ScriptChapter, parse_chapter, read_transcript, render_chapters
 
 
 class EpisodeEditor(NamedTuple):
@@ -18,6 +19,7 @@ class EpisodeEditor(NamedTuple):
     transcript: MarkdownScript
     filename: str
     selected: int = 0
+    preview: tuple[ScriptChapter, Path] | None = None
 
 
 def editor_directory(state: EpisodeEditor | None) -> Path:
@@ -65,7 +67,7 @@ def select_chapter(state: EpisodeEditor, selection: str | None, body: str):
         index = int(selection) if selection is not None else -1
         if not 0 <= index < len(state.transcript.chapters):
             raise ValueError('Choose a chapter from the list.')
-        state = save_chapter_text(state, body)._replace(selected=index)
+        state = save_chapter_text(state, body)._replace(selected=index, preview=None)
     except ValueError as error:
         gr.Warning(str(error))
         return state, gr.update(value=str(state.selected)), body, gr.skip()
@@ -73,16 +75,31 @@ def select_chapter(state: EpisodeEditor, selection: str | None, body: str):
     return state, gr.skip(), chapter.body.strip(), None
 
 
-def render_chapter_preview(state: EpisodeEditor, body: str, config_file: str | None):
+def render_chapter_preview(state: EpisodeEditor, body: str, config_file: str | None, *, retake: bool = False):
     try:
         state = save_chapter_text(state, body)
         config = PodcastConfig.load(config_file or DEFAULT_CONFIG_PATH, require_research_credentials=False)
         chapter = parse_chapter(state.transcript.chapters[state.selected])
+        number = state.selected + 1
         directory = Path(mkdtemp(prefix='preview-', dir=state.directory))
-        output = render_chapters([chapter], config, directory / f'chapter-{state.selected + 1}.wav')
+        output = render_chapters([chapter], config, directory / f'chapter-{number}.wav',
+                                 first_chapter=number, retake=retake)
     except (ValueError, OSError) as error:
         raise gr.Error(str(error)) from error
-    return state, str(output)
+    return state._replace(preview=(chapter, output)), str(output)
+
+
+def check_chapter_preview(state: EpisodeEditor, body: str, config_file: str | None):
+    try:
+        state = save_chapter_text(state, body)
+        chapter = parse_chapter(state.transcript.chapters[state.selected])
+        if state.preview is None or state.preview[0] != chapter:
+            raise ValueError('Render the current chapter dialogue before checking its audio.')
+        config = PodcastConfig.load(config_file or DEFAULT_CONFIG_PATH, require_research_credentials=False)
+        findings = check_chapter_audio(chapter, state.preview[1], config)
+    except (ValueError, OSError) as error:
+        raise gr.Error(str(error)) from error
+    return format_audio_check(chapter, findings)
 
 
 def export_episode(state: EpisodeEditor, body: str, config_file: str | None):

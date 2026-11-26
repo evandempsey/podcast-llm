@@ -1,6 +1,7 @@
 import base64
 from dataclasses import replace
 from io import BytesIO
+import sys
 import wave
 from unittest.mock import Mock
 
@@ -8,6 +9,7 @@ import pytest
 
 from podcast_llm import tts_backends
 from podcast_llm.config import PodcastConfig
+from podcast_llm.generate import main
 from podcast_llm.render import read_script, render_script
 
 
@@ -40,11 +42,11 @@ def config(tmp_path):
                    checkpoint_dir=str(tmp_path / 'checkpoints'))
 
 
-def gemini_response():
+def gemini_response(sample: bytes = b'\0\0'):
     buffer = BytesIO()
     with wave.open(buffer, 'wb') as audio:
         audio.setparams((1, 2, 24000, 0, 'NONE', 'not compressed'))
-        audio.writeframes(bytes(4800))
+        audio.writeframes(sample * 2400)
     return Mock(**{'json.return_value': {
         'status': 'completed',
         'steps': [{'content': [{'type': 'audio', 'data': base64.b64encode(buffer.getvalue()).decode()}]}],
@@ -111,3 +113,93 @@ def test_read_legacy_transcript_without_chapters(tmp_path):
         {'speaker': 'Interviewer', 'text': 'Hello.\nHere is my next thought.'},
         {'speaker': 'Interviewee', 'text': 'Hi.'},
     ]
+
+
+def test_cli_lists_chapters_without_loading_config(tmp_path, monkeypatch, mocker, capsys):
+    script = tmp_path / 'episode.md'
+    script.write_text(SCRIPT)
+    load = mocker.patch.object(PodcastConfig, 'load')
+    monkeypatch.setattr(sys, 'argv', ['podcast-llm', 'render', str(script), '--list-chapters'])
+
+    main()
+
+    assert capsys.readouterr().out.splitlines() == ['1. First chapter', '2. Second chapter']
+    load.assert_not_called()
+
+
+def test_cli_chapter_preview_is_reused_by_full_render(config, tmp_path, monkeypatch, mocker):
+    monkeypatch.setattr(tts_backends, 'DIALOGUE_CHUNK_SIZE', 16)
+    mocker.patch.object(PodcastConfig, 'load', return_value=config)
+    session = mocker.patch('podcast_llm.tts_backends.requests.Session').return_value.__enter__.return_value
+    session.post.return_value = gemini_response()
+    script = tmp_path / 'episode.md'
+    script.write_text(SCRIPT)
+    args = ['podcast-llm', 'render', str(script), '--cache-dir', str(tmp_path / 'cache')]
+
+    monkeypatch.setattr(sys, 'argv', [*args, '--chapter', '2'])
+    main()
+    assert session.post.call_count == 1
+    assert session.post.call_args.kwargs['json']['input'][0]['content'][0]['text'] == 'Third batch.'
+    with wave.open(str(tmp_path / 'episode.chapter-2.wav')) as audio:
+        assert audio.getnframes() == 2400
+
+    monkeypatch.setattr(sys, 'argv', args)
+    main()
+    assert session.post.call_count == 3
+    with wave.open(str(tmp_path / 'episode.wav')) as audio:
+        assert audio.getnframes() == 7200
+    assert script.read_text() == SCRIPT
+
+
+def test_cli_rejects_out_of_range_chapter(config, tmp_path, monkeypatch, mocker, capsys):
+    mocker.patch.object(PodcastConfig, 'load', return_value=config)
+    script = tmp_path / 'episode.md'
+    script.write_text(SCRIPT)
+    monkeypatch.setattr(sys, 'argv', ['podcast-llm', 'render', str(script), '--chapter', '3'])
+
+    with pytest.raises(SystemExit) as error:
+        main()
+
+    assert error.value.code == 2
+    assert 'Chapter 3 is out of range' in capsys.readouterr().err
+    assert not (tmp_path / 'episode.chapter-3.wav').exists()
+
+
+def test_cli_retake_publishes_only_after_every_batch_succeeds(config, tmp_path, monkeypatch, mocker):
+    monkeypatch.setattr(tts_backends, 'DIALOGUE_CHUNK_SIZE', 16)
+    mocker.patch.object(PodcastConfig, 'load', return_value=config)
+    session = mocker.patch('podcast_llm.tts_backends.requests.Session').return_value.__enter__.return_value
+    original, replacement = gemini_response(), gemini_response(b'\x01\x00')
+    session.post.side_effect = [original, original, original, replacement, KeyboardInterrupt,
+                                replacement, replacement]
+    script = tmp_path / 'episode.md'
+    script.write_text(SCRIPT)
+    full = tmp_path / 'episode.wav'
+    preview = tmp_path / 'episode.chapter-1.wav'
+    args = ['podcast-llm', 'render', str(script)]
+    monkeypatch.setattr(sys, 'argv', args)
+    main()
+    original_export = full.read_bytes()
+    monkeypatch.setattr(sys, 'argv', [*args, '--chapter', '1'])
+    main()
+    previous_preview = preview.read_bytes()
+
+    monkeypatch.setattr(sys, 'argv', [*args, '--chapter', '1', '--retake'])
+    with pytest.raises(SystemExit) as interrupted:
+        main()
+    assert interrupted.value.code == 130
+    assert preview.read_bytes() == previous_preview
+    assert not list((tmp_path / 'checkpoints').rglob('active-*.txt'))
+    monkeypatch.setattr(sys, 'argv', args)
+    main()
+    assert full.read_bytes() == original_export
+    assert session.post.call_count == 5
+
+    monkeypatch.setattr(sys, 'argv', [*args, '--chapter', '1', '--retake'])
+    main()
+    assert preview.read_bytes() != previous_preview
+    monkeypatch.setattr(sys, 'argv', args)
+    main()
+    assert session.post.call_count == 7
+    with wave.open(str(full)) as audio:
+        assert audio.readframes(7200) == b'\x01\x00' * 4800 + bytes(4800)

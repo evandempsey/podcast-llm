@@ -86,10 +86,24 @@ def test_gradio_chapter_preview_and_export_share_the_cli_cache(gradio_client, tm
     with wave.open(BytesIO(gradio_client.get(preview['url']).content)) as audio:
         assert audio.getnframes() == 2400
 
+    transcribe = mocker.patch('podcast_llm.audio_qa.transcribe_audio', return_value='')
+    response = gradio_client.post('/gradio_api/run/check_audio', json={
+        'data': [None, body, None], 'session_hash': 'editor-test',
+    })
+    assert response.status_code == 500
+    assert 'Render the current chapter dialogue' in response.json()['error']
+    transcribe.assert_not_called()
+
+    report, = call_gradio(gradio_client, 'check_audio', None, edited, None)
+    assert 'possibly missing: List every required key' in report
+    _, new_preview = call_gradio(gradio_client, 'retake', None, edited, None)
+    assert gradio_client.get(new_preview['url']).status_code == 200
+    assert requests == [['List every required key.'], ['List every required key.']]
+
     # Navigation retains the change, and export needs no further speech requests.
     _, _, introduction, _ = call_gradio(gradio_client, 'select_chapter', None, '0', edited)
     _, full, transcript = call_gradio(gradio_client, 'export_episode', None, introduction, None)
-    assert requests == [['List every required key.']]
+    assert requests == [['List every required key.'], ['List every required key.']]
     assert gradio_client.get(transcript['url']).text == TRANSCRIPT.replace(
         'Add a required list.', 'List every required key.',
     )
