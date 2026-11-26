@@ -1,12 +1,14 @@
 """Render a saved Markdown transcript with per-chapter audio checkpoints."""
 
 import argparse
+from contextlib import ExitStack, contextmanager
 from hashlib import sha256
 import json
 import logging
 from pathlib import Path
 import re
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from shutil import rmtree
+from tempfile import NamedTemporaryFile, TemporaryDirectory, mkdtemp
 from typing import NamedTuple
 from zipfile import BadZipFile, ZipFile
 
@@ -87,6 +89,13 @@ def read_script(path: Path) -> list[ScriptChapter]:
     return [parse_chapter(chapter) for chapter in read_transcript(path).chapters]
 
 
+def read_chapter(script: Path, number: int) -> ScriptChapter:
+    chapters = read_transcript(script).chapters
+    if not 1 <= number <= len(chapters):
+        raise ValueError(f'Chapter {number} is out of range (1–{len(chapters)}). Use --list-chapters.')
+    return parse_chapter(chapters[number - 1])
+
+
 def _digest(data) -> str:
     return sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode('utf-8')).hexdigest()
 
@@ -121,12 +130,44 @@ def _save_batch(path: Path, batch: AudioBatch) -> None:
 class ChapterCache:
     """Commit each completed provider request before moving on to the next."""
 
-    def __init__(self, directory: Path, config: PodcastConfig, chapter: ScriptChapter):
+    def __init__(self, directory: Path, config: PodcastConfig, chapter: ScriptChapter, number: int):
         identity = [AUDIO_CACHE_VERSION, config.tts_provider,
                     config.tts_settings.get(config.tts_provider, {}), chapter.turns]
         self.directory = directory / _digest(identity)
+        # Identical dialogue can share the original cache. A retake belongs to one chapter.
+        self.take_pointer = self.directory / f'active-{_digest([number, chapter.title])}.txt'
         self.title = chapter.title
         self.batch_number = 0
+        try:
+            take = self.take_pointer.read_text(encoding='utf-8').strip()
+        except FileNotFoundError:
+            return
+        if re.fullmatch(r'take-[a-z0-9_]+', take) and (self.directory / take).is_dir():
+            self.directory /= take
+        else:
+            logger.warning('Chapter %r: ignoring unreadable take pointer', self.title)
+
+    @contextmanager
+    def retake(self):
+        """Publish new batches together after synthesis and audio assembly succeed."""
+        root = self.take_pointer.parent
+        root.mkdir(parents=True, exist_ok=True)
+        take = Path(mkdtemp(prefix='take-', dir=root))
+        self.directory = take
+        try:
+            yield
+        except BaseException:
+            rmtree(take, ignore_errors=True)
+            raise
+        # Existing readers keep their previous batch directories while the new take becomes current.
+        with NamedTemporaryFile(dir=root, mode='w', encoding='utf-8', delete=False) as file:
+            staged = Path(file.name)
+            try:
+                file.write(take.name)
+                file.close()
+                staged.replace(self.take_pointer)
+            finally:
+                staged.unlink(missing_ok=True)
 
     def __call__(self, turns, synthesize, previous_request_id) -> AudioBatch:
         self.batch_number += 1
@@ -154,16 +195,21 @@ class ChapterCache:
 
 def render_script(
     script: Path, config: PodcastConfig, output: Path | None = None, cache_dir: Path | None = None,
+    *, chapter: int | None = None, retake: bool = False,
 ) -> Path:
-    """Synthesize and export a saved script, reusing completed chapter batches."""
-    output = output if output is not None else script.with_suffix(f'.{config.output_format}')
+    """Export a saved script or one numbered chapter, reusing completed audio batches."""
+    if output is None:
+        suffix = f'.{config.output_format}' if chapter is None else f'.chapter-{chapter}.wav'
+        output = script.with_suffix(suffix)
     if output.resolve() == script.resolve():
         raise ValueError('The audio output must be a different file from the saved script')
-    return render_chapters(read_script(script), config, output, cache_dir)
+    chapters = read_script(script) if chapter is None else [read_chapter(script, chapter)]
+    return render_chapters(chapters, config, output, cache_dir, first_chapter=chapter or 1, retake=retake)
 
 
 def render_chapters(
     chapters: list[ScriptChapter], config: PodcastConfig, output: Path, cache_dir: Path | None = None,
+    *, first_chapter: int = 1, retake: bool = False,
 ) -> Path:
     """Export selected chapters using the same audio checkpoints as the full script."""
     audio_format = output.suffix.lstrip('.').lower()
@@ -171,15 +217,19 @@ def render_chapters(
         raise ValueError('Use an .mp3 or .wav audio output path')
     if not chapters:
         raise ValueError('Select at least one chapter to render')
+    if retake and len(chapters) != 1:
+        raise ValueError('Select one chapter to retake')
     cache_dir = cache_dir if cache_dir is not None else Path(config.checkpoint_dir) / 'audio'
     Path(config.temp_audio_dir).mkdir(parents=True, exist_ok=True)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    with TemporaryDirectory(prefix='tts-', dir=config.temp_audio_dir) as work_dir:
+    with TemporaryDirectory(prefix='tts-', dir=config.temp_audio_dir) as work_dir, ExitStack() as takes:
         audio_files = []
-        for chapter in chapters:
-            cleaned = ScriptChapter(chapter.title, clean_text_for_tts(chapter.turns))
-            cache = ChapterCache(cache_dir, config, cleaned)
+        for number, chapter in enumerate(chapters, first_chapter):
+            cleaned = chapter._replace(turns=clean_text_for_tts(chapter.turns))
+            cache = ChapterCache(cache_dir, config, cleaned, number)
+            if retake:
+                takes.enter_context(cache.retake())
             start = len(audio_files)
             for audio in render_audio_chunks(config, cleaned.turns, run_batch=cache):
                 path = Path(work_dir) / f'{len(audio_files):06d}.{audio.extension}'
@@ -195,13 +245,26 @@ def render_chapters(
 def render_cli(argv: list[str], default_config: str) -> None:
     parser = argparse.ArgumentParser(prog='podcast-llm render', description='Render a saved Markdown script')
     parser.add_argument('script', type=Path, help='Saved Markdown transcript')
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument('--list-chapters', action='store_true', help='Print chapter numbers and titles')
+    selection.add_argument('--chapter', type=int, metavar='NUMBER', help='Render only this chapter (starting at 1)')
+    parser.add_argument('--retake', action='store_true', help='Synthesize a new take for the selected chapter')
     parser.add_argument('-o', '--output', '--audio-output', type=Path, help='Destination .mp3 or .wav file')
     parser.add_argument('--config', default=default_config, help='YAML configuration with TTS provider and voices')
     parser.add_argument('--cache-dir', type=Path, help='Audio checkpoint directory (default: checkpoint_dir/audio)')
     args = parser.parse_args(argv)
-    setup_logging(logging.INFO)
+    if args.retake and args.chapter is None:
+        parser.error('--retake requires --chapter NUMBER')
     try:
+        if args.list_chapters:
+            for number, chapter in enumerate(read_transcript(args.script).chapters, start=1):
+                print(f'{number}. {chapter.title}')
+            return
+        setup_logging(logging.INFO)
         config = PodcastConfig.load(yaml_path=args.config, require_research_credentials=False)
-        render_script(args.script, config, output=args.output, cache_dir=args.cache_dir)
+        render_script(args.script, config, output=args.output, cache_dir=args.cache_dir,
+                      chapter=args.chapter, retake=args.retake)
+    except (ValueError, OSError) as error:
+        parser.error(str(error))
     except KeyboardInterrupt:
         parser.exit(130, 'Render interrupted. Re-run the command to resume from saved audio.\n')

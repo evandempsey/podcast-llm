@@ -147,7 +147,7 @@ def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         description='Generate podcasts using LLMs and TTS',
-        epilog='Use "podcast-llm render --help" to render a saved script.',
+        epilog='Use "podcast-llm render --help" or "podcast-llm check --help" for saved scripts.',
     )
     parser.add_argument(
         'topic',
@@ -222,6 +222,11 @@ def parse_arguments() -> argparse.Namespace:
 
 def main() -> None:
     """Main entry point for the CLI."""
+    if sys.argv[1:2] == ['check']:
+        from podcast_llm.audio_qa import check_cli
+
+        check_cli(sys.argv[2:], DEFAULT_CONFIG_PATH)
+        return
     if sys.argv[1:2] == ['render']:
         from podcast_llm.render import render_cli
 

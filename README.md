@@ -110,15 +110,26 @@ individual chapters, then download the full audio and revised transcript.
    Set each speaker's voice under the matching `tts_settings` entry. See the
    [configuration examples](docs/source/configuration.rst#text-to-speech-configuration).
 
-4. Render a saved Markdown transcript:
+4. Edit the saved Markdown transcript in your editor, then use the CLI to list,
+   preview, and export chapters:
 
    ```bash
+   podcast-llm render podcast.md --list-chapters
+   podcast-llm render podcast.md --chapter 2 --config voices.yaml
+   podcast-llm check podcast.md --chapter 2 --config voices.yaml
+   podcast-llm render podcast.md --chapter 2 --retake --config voices.yaml
    podcast-llm render podcast.md --config voices.yaml --output podcast.wav
    ```
 
-   Run the same command again after an interruption or script edit. Completed
-   speech batches are stored under `checkpoint_dir/audio` by chapter. Use
-   `--cache-dir` to choose a different location.
+   The chapter preview writes `podcast.chapter-2.wav`. The full episode reuses
+   audio from the preview when the dialogue and speech settings match. Run the
+   same command again after an interruption or script edit. Completed speech
+   batches are stored under `checkpoint_dir/audio` by chapter. Use `--cache-dir`
+   to choose a different location.
+
+   `check` uses `OPENAI_API_KEY` to transcribe the preview and flag likely missing
+   or changed dialogue. `--retake` requests new audio for one chapter with the
+   same dialogue and voices. A successful retake is used in the next export.
 
 5. Launch the Gradio web interface:
    ```bash
@@ -128,9 +139,10 @@ individual chapters, then download the full audio and revised transcript.
 
    Open a saved Markdown transcript in **Episode editor** or choose **Draft script
    for editing** on the **Generate** tab. Select a chapter, edit its dialogue,
-   then click **Render chapter** and press **Play**. **Export episode** provides
-   the full audio and edited transcript. Use **Settings** to choose a YAML file
-   with your speech provider and voices.
+   then click **Render chapter** and press **Play**. **Check audio** reviews the
+   take against the script, and **Retake chapter** requests another performance.
+   **Export episode** provides the full audio and edited transcript. Use
+   **Settings** to choose a YAML file with your speech provider and voices.
 
 
 ## License
