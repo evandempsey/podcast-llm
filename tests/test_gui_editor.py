@@ -3,7 +3,12 @@ from io import BytesIO
 from pathlib import Path
 import wave
 
-from podcast_llm import gui, gui_editor, text_to_speech
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from gradio import mount_gradio_app
+import pytest
+
+from podcast_llm import gui, text_to_speech
 from podcast_llm.config import PodcastConfig
 from podcast_llm.render import render_script
 from podcast_llm.tts_backends import AudioChunk
@@ -27,13 +32,31 @@ TRANSCRIPT = """# JSON episode
 """
 
 
-def test_gradio_chapter_preview_and_export_share_the_cli_cache(tmp_path, monkeypatch, mocker):
+@pytest.fixture
+def gradio_client(tmp_path, monkeypatch):
+    monkeypatch.setenv('GRADIO_TEMP_DIR', str(tmp_path / 'gradio'))
+    monkeypatch.setenv('GRADIO_ANALYTICS_ENABLED', 'False')
+    interface = gui.build_interface()
+    with TestClient(mount_gradio_app(FastAPI(), interface, path='/')) as client:
+        try:
+            yield client
+        finally:
+            interface.state_holder.delete_state('editor-test')
+
+
+def call_gradio(client, endpoint, *inputs):
+    response = client.post(f'/gradio_api/run/{endpoint}', json={'data': inputs, 'session_hash': 'editor-test'})
+    assert response.status_code == 200, response.text
+    return response.json()['data']
+
+
+def test_gradio_chapter_preview_and_export_share_the_cli_cache(gradio_client, tmp_path, monkeypatch, mocker):
     script = tmp_path / 'episode.md'
     script.write_text(TRANSCRIPT)
     config = replace(PodcastConfig.load(require_research_credentials=False), tts_provider='test_editor',
                      output_format='wav', temp_audio_dir=str(tmp_path / 'temp'),
                      checkpoint_dir=str(tmp_path / 'checkpoints'))
-    mocker.patch.object(gui_editor.PodcastConfig, 'load', return_value=config)
+    mocker.patch.object(PodcastConfig, 'load', return_value=config)
     monkeypatch.setattr(text_to_speech, '_TTS_BACKENDS', text_to_speech._TTS_BACKENDS.copy())
     requests = []
 
@@ -50,42 +73,46 @@ def test_gradio_chapter_preview_and_export_share_the_cli_cache(tmp_path, monkeyp
     assert requests == [["Let's talk about schemas."], ['Add a required list.']]
     requests.clear()
 
-    state, selection, body, *_ = gui_editor.open_transcript(str(script), None)
-    try:
-        assert selection['value'] == '0'
-        state, _, body, _ = gui_editor.select_chapter(state, '1', body)
-        assert body == '**Interviewee**: Add a required list. [S1]'
-        body = body.replace('Add a required list.', 'List every required key.')
-        state, preview = gui_editor.render_chapter_preview(state, body, None)
-        assert requests == [['List every required key.']]
-        with wave.open(preview) as audio:
-            assert audio.getnframes() == 2400
+    upload = gradio_client.post('/gradio_api/upload', files={'files': (script.name, script.read_bytes())})
+    assert upload.status_code == 200, upload.text
+    uploaded_file = {'path': upload.json()[0], 'meta': {'_type': 'gradio.FileData'}}
+    _, selection, body, *_ = call_gradio(gradio_client, 'open_transcript', uploaded_file, None)
+    assert selection['value'] == '0'
+    _, _, body, _ = call_gradio(gradio_client, 'select_chapter', None, '1', body)
+    assert body == '**Interviewee**: Add a required list. [S1]'
+    edited = body.replace('Add a required list.', 'List every required key.')
+    _, preview = call_gradio(gradio_client, 'render_chapter', None, edited, None)
+    assert requests == [['List every required key.']]
+    with wave.open(BytesIO(gradio_client.get(preview['url']).content)) as audio:
+        assert audio.getnframes() == 2400
 
-        # Navigation retains the change, and export needs no further speech requests.
-        state, _, introduction, _ = gui_editor.select_chapter(state, '0', body)
-        state, full, transcript = gui_editor.export_episode(state, introduction, None)
-        assert requests == [['List every required key.']]
-        assert Path(transcript).read_text() == TRANSCRIPT.replace('Add a required list.', 'List every required key.')
-        with wave.open(full) as audio:
-            assert audio.getnframes() == 4800
-    finally:
-        gui_editor.close_editor(state)
-
-
-def test_drafted_transcript_opens_in_episode_editor(mocker):
-    def generate_to_file(topic, mode, files, urls, qa_rounds, checkpoints, config, text_output, audio_output,
-                         audience, target_minutes):
-        assert topic == 'JSON Schema' and mode == 'context'
-        assert audio_output == ''
-        Path(text_output).write_text(TRANSCRIPT)
-
-    mocker.patch.object(gui, 'submit_handler', side_effect=generate_to_file)
-    state, selection, body, *_, tab = gui.draft_script(
-        None, 'JSON Schema', 'context', ['source.md'], '', 1, True, None, 'Developers', 4,
+    # Navigation retains the change, and export needs no further speech requests.
+    _, _, introduction, _ = call_gradio(gradio_client, 'select_chapter', None, '0', edited)
+    _, full, transcript = call_gradio(gradio_client, 'export_episode', None, introduction, None)
+    assert requests == [['List every required key.']]
+    assert gradio_client.get(transcript['url']).text == TRANSCRIPT.replace(
+        'Add a required list.', 'List every required key.',
     )
-    try:
-        assert selection['choices'][1] == ('2. Writing the Contract', '1')
-        assert "Let's talk about schemas." in body
-        assert tab['selected'] == 'editor'
-    finally:
-        gui_editor.close_editor(state)
+    with wave.open(BytesIO(gradio_client.get(full['url']).content)) as audio:
+        assert audio.getnframes() == 4800
+
+
+def test_drafted_transcript_opens_in_episode_editor(gradio_client, mocker):
+    def generate_transcript(**options):
+        Path(options['text_output']).write_text(TRANSCRIPT)
+
+    generate = mocker.patch.object(gui, 'generate', side_effect=generate_transcript)
+    _, selection, body, *_, tab = call_gradio(
+        gradio_client, 'draft_script', None, ' JSON Schema ', 'context', None,
+        'https://example.com/schema\n\nignored text', 1, True, None, 'Developers', 4,
+    )
+    options = generate.call_args.kwargs
+    assert options['topic'] == 'JSON Schema'
+    assert options['mode'] == 'context'
+    assert options['sources'] == ['https://example.com/schema']
+    assert options['audio_output'] is None
+    assert options['audience'] == 'Developers'
+    assert options['target_minutes'] == 4
+    assert selection['choices'][1] == ['2. Writing the Contract', '1']
+    assert "Let's talk about schemas." in body
+    assert tab['selected'] == 'editor'
