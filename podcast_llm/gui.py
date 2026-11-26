@@ -32,6 +32,7 @@ from gradio_log import Log
 from .config.logging_config import setup_logging
 from .context_writer import DEFAULT_CONTEXT_AUDIENCE, DEFAULT_CONTEXT_MINUTES
 from .generate import generate
+from .gui_editor import close_editor, export_episode, open_transcript, render_chapter_preview, select_chapter
 
 PACKAGE_ROOT = Path(__file__).parent
 DEFAULT_CONFIG_PATH = os.path.join(PACKAGE_ROOT, 'config', 'config.yaml')
@@ -86,13 +87,13 @@ def submit_handler(
     logging.info(f'Text Output: {text_output} (type: {type(text_output)})')
     logging.info(f'Audio Output: {audio_output} (type: {type(audio_output)})')
 
-    text_output_file = text_output.strip() if text_output.strip() else None
-    audio_output_file = audio_output.strip() if audio_output.strip() else None
+    text_output_file = (text_output or '').strip() or None
+    audio_output_file = (audio_output or '').strip() or None
 
     # Split URLs by line and filter out non-URL lines
     source_urls_list = [
         url.strip() 
-        for url in source_urls.strip().split('\n') 
+        for url in (source_urls or '').splitlines()
         if url.strip().startswith(('http://', 'https://'))
     ]
 
@@ -115,112 +116,99 @@ def submit_handler(
         target_minutes=target_minutes if target_minutes is not None else DEFAULT_CONTEXT_MINUTES,
     )
 
+def draft_script(state, topic, mode, source_files, source_urls, qa_rounds,
+                 use_checkpoints, config_file, audience, target_minutes):
+    with tempfile.TemporaryDirectory(prefix='podcast-draft-') as directory:
+        transcript = Path(directory) / 'episode.md'
+        submit_handler(
+            topic, mode, source_files, source_urls, qa_rounds, use_checkpoints,
+            config_file, str(transcript), '', audience, target_minutes,
+        )
+        return (*open_transcript(str(transcript), state), gr.update(selected='editor'))
+
+
+def build_interface() -> gr.Blocks:
+    """Build the generation form and the saved-script editor."""
+    with gr.Blocks(title='Podcast LLM') as iface:
+        gr.Markdown('# Podcast-LLM')
+        state = gr.State(delete_callback=close_editor)
+        with gr.Accordion('Settings', open=False):
+            config = gr.File(label='Config file (YAML)', file_types=['.yaml', '.yml'], type='filepath')
+
+        with gr.Tabs(selected='editor') as tabs:
+            with gr.Tab('Episode editor', id='editor'):
+                saved_script = gr.File(
+                    label='Open a saved transcript', file_types=['.md', '.markdown'], type='filepath',
+                )
+                with gr.Group(visible=False) as editor:
+                    chapter = gr.Dropdown(label='Chapter', interactive=True)
+                    dialogue = gr.Textbox(label='Chapter dialogue', lines=14, interactive=True)
+                    with gr.Row():
+                        preview = gr.Button('Render chapter', variant='primary')
+                        export = gr.Button('Export episode')
+                    audio = gr.Audio(label='Chapter preview', interactive=False, format='wav')
+                    with gr.Row():
+                        audio_download = gr.File(label='Episode audio', interactive=False)
+                        transcript_download = gr.File(label='Edited transcript', interactive=False)
+
+            with gr.Tab('Generate', id='generate'):
+                topic = gr.Textbox(label='Topic')
+                mode = gr.Radio(
+                    choices=['research', 'context'], label='Mode', value='research', interactive=True,
+                )
+                qa_rounds = gr.Number(
+                    label='Q&A rounds per section', value=1, minimum=1, maximum=10, precision=0,
+                )
+                with gr.Row(visible=False) as context_options:
+                    audience = gr.Textbox(label='Audience', value=DEFAULT_CONTEXT_AUDIENCE)
+                    target_minutes = gr.Number(
+                        label='Target runtime (minutes)', value=DEFAULT_CONTEXT_MINUTES, minimum=1, precision=0,
+                    )
+                mode.change(
+                    fn=lambda selected: (
+                        gr.update(visible=selected == 'research'), gr.update(visible=selected == 'context'),
+                    ),
+                    inputs=mode,
+                    outputs=[qa_rounds, context_options],
+                )
+                with gr.Row():
+                    source_files = gr.File(label='Source files', file_count='multiple', type='filepath')
+                    source_urls = gr.TextArea(label='Source URLs')
+                use_checkpoints = gr.Checkbox(label='Use checkpoints', value=True)
+                draft = gr.Button('Draft script for editing', variant='primary')
+                with gr.Accordion('Generate to files', open=False):
+                    text_output = gr.Textbox(label='Transcript output path')
+                    audio_output = gr.Textbox(label='Audio output path')
+                    generate_files = gr.Button('Generate podcast')
+
+        with gr.Accordion('System log', open=False):
+            Log(temp_log_file, dark=True, xterm_font_size=12)
+
+        editor_outputs = [state, chapter, dialogue, audio, audio_download, transcript_download, editor]
+        saved_script.upload(
+            open_transcript, [saved_script, state], editor_outputs, api_name='open_transcript',
+        )
+        chapter.input(select_chapter, [state, chapter, dialogue], [state, chapter, dialogue, audio])
+        preview.click(render_chapter_preview, [state, dialogue, config], [state, audio], api_name='render_chapter')
+        export.click(
+            export_episode, [state, dialogue, config], [state, audio_download, transcript_download],
+            api_name='export_episode',
+        )
+        generation_inputs = [topic, mode, source_files, source_urls, qa_rounds, use_checkpoints, config]
+        draft.click(
+            draft_script, [state, *generation_inputs, audience, target_minutes], [*editor_outputs, tabs],
+            api_name='draft_script',
+        )
+        generate_files.click(
+            submit_handler, [*generation_inputs, text_output, audio_output, audience, target_minutes], [],
+        )
+    return iface
+
+
 def main():
-    """
-    Main entry point for the Gradio web interface.
-
-    Creates and launches a Gradio interface that provides a user-friendly way to interact
-    with the podcast generation system. The interface includes:
-    - Topic input and conversation settings
-    - Mode selection (research vs context)
-    - Source file and URL inputs for context mode
-    - Behavior options like checkpointing
-    - Output configuration options
-
-    The interface is organized into logical sections with clear labels and tooltips.
-    All inputs are validated and passed to the generate() function.
-
-    Returns:
-        None
-    """
-    with gr.Blocks() as iface:
-        # Title
-        gr.Markdown('# Podcast-LLM', elem_classes='text-center')
-
-        # Conversation Options Section
-        gr.Markdown('## Conversation Options')
-        with gr.Row():
-            topic_input = gr.Textbox(label='Topic')
-            qa_rounds_input = gr.Number(
-                label='Q&A rounds per section (research mode)',
-                value=1,
-                interactive=True,
-                minimum=1,
-                maximum=10,
-                precision=0
-            )
-
-        # Mode Selection Section  
-        gr.Markdown('## Mode of Operation')
-        mode_of_operation = gr.Radio(
-            choices=['research', 'context'],
-            label='Mode',
-            value='research',
-            interactive=True,
-            show_label=False
-        )
-        with gr.Row(visible=False) as context_options:
-            audience_input = gr.Textbox(label='Audience', value=DEFAULT_CONTEXT_AUDIENCE)
-            target_minutes_input = gr.Number(
-                label='Target runtime (minutes)', value=DEFAULT_CONTEXT_MINUTES, minimum=1, precision=0,
-            )
-        mode_of_operation.change(
-            fn=lambda mode: gr.update(visible=mode == 'context'),
-            inputs=mode_of_operation,
-            outputs=context_options,
-        )
-
-        # Source Inputs Section
-        with gr.Row(equal_height=True):
-            source_files = gr.File(
-                label='Source files',
-                file_count='multiple',
-                type='filepath'
-            )
-            source_urls = gr.TextArea(label='Source URLs')
-
-        # Behavior Options Section
-        gr.Markdown('## Behaviour Options')
-        use_checkpoints_input = gr.Checkbox(
-            label='Use Checkpoints',
-            value=True
-        )
-        custom_config_file_input = gr.File(
-            label='Config file',
-            type='filepath'
-        )
-
-        # Output Options Section
-        gr.Markdown('## Output Options')
-        with gr.Row():
-            text_output_input = gr.Textbox(label='Text output')
-            audio_output_input = gr.Textbox(label='Audio output')
-
-        # Submit Button
-        submit_button = gr.Button('Generate Podcast')
-        submit_button.click(
-            fn=submit_handler,
-            inputs=[
-                topic_input,
-                mode_of_operation,
-                source_files,
-                source_urls,
-                qa_rounds_input,
-                use_checkpoints_input,
-                custom_config_file_input,
-                text_output_input,
-                audio_output_input,
-                audience_input,
-                target_minutes_input,
-            ],
-            outputs=[]
-        )
-
-        # Log Display
-        gr.Markdown('## System Log')
-        Log(temp_log_file, dark=True, xterm_font_size=12)
-
-    iface.launch()
+    """Launch the Gradio application."""
+    setup_logging(logging.INFO, output_file=temp_log_file)
+    build_interface().launch()
 
 
 if __name__ == '__main__':
