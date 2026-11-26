@@ -69,11 +69,15 @@ You can launch the Gradio web interface using:
 
    podcast-llm-gui
 
-This launches a user-friendly web interface where you can:
+Open a saved Markdown transcript on the **Episode editor** tab. To start from a
+topic or source files, use **Draft script for editing** on the **Generate** tab.
 
-- Enter a podcast topic
-- Choose between research and context modes  
-- Upload source files and URLs for context mode
-- Configure Q&A rounds and checkpointing
-- Specify output paths for text and audio
-- Monitor generation progress in real-time
+1. Choose a chapter and edit its dialogue. Keep the speaker labels and any
+   source references in the Markdown.
+2. Click **Render chapter** and press **Play** to hear the edited chapter.
+3. Click **Export episode** to download the complete audio and edited Markdown.
+
+The editor uses the same audio cache as the render command. A full export
+reuses any chapter audio already saved for its dialogue and speech settings.
+Upload a YAML config under **Settings** to choose the speech provider and voices.
+The **Generate** tab also provides the existing direct-to-file workflow.

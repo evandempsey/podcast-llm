@@ -18,7 +18,7 @@ from podcast_llm.tts_backends import AudioBatch, AudioChunk
 logger = logging.getLogger(__name__)
 
 SCRIPT_SECTION = re.compile(r'^##[ \t]+Script[ \t]*\n(.*?)(?=^#{1,2}[ \t]|\Z)', re.M | re.S)
-CHAPTER_HEADING = re.compile(r'^###[ \t]+([^\n]+)[ \t]*$', re.M)
+CHAPTER_HEADING = re.compile(r'^###[ \t]+([^\n]+)\n?', re.M)
 SPEAKER_LABEL = re.compile(r'^\*\*([^*\n]+)\*\*:[ \t]*', re.M)
 SOURCE_MARKERS = re.compile(r'(?:[ \t]+\[S[0-9]+\])+$')
 # Increment when synthesis defaults or the audio cache format change.
@@ -30,33 +30,61 @@ class ScriptChapter(NamedTuple):
     turns: list[dict[str, str]]
 
 
-def read_script(path: Path) -> list[ScriptChapter]:
-    """Read spoken turns from the Script section of an exported transcript."""
-    match = SCRIPT_SECTION.search(path.read_text(encoding='utf-8-sig'))
+class MarkdownChapter(NamedTuple):
+    title: str
+    heading: str
+    body: str
+
+
+class MarkdownScript(NamedTuple):
+    prefix: str
+    chapters: tuple[MarkdownChapter, ...]
+    suffix: str
+
+    def as_text(self) -> str:
+        return self.prefix + ''.join(chapter.heading + chapter.body for chapter in self.chapters) + self.suffix
+
+
+def read_transcript(path: Path) -> MarkdownScript:
+    """Read an exported transcript while preserving its headings and source notes."""
+    text = path.read_text(encoding='utf-8-sig')
+    match = SCRIPT_SECTION.search(text)
     if not match:
         raise ValueError('The saved transcript must contain a ## Script section')
 
-    lead, *sections = CHAPTER_HEADING.split(match[1])
+    body = match[1]
+    headings = list(CHAPTER_HEADING.finditer(body))
+    lead = body[:headings[0].start()] if headings else body
+    prefix = text[:match.start(1)]
     chapters = []
     if lead.strip():
-        chapters.append(('Script', lead))
-    chapters.extend(zip(sections[::2], sections[1::2]))
+        chapters.append(MarkdownChapter('Script', '', lead))
+    else:
+        prefix += lead
+    for index, heading in enumerate(headings):
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(body)
+        chapters.append(MarkdownChapter(heading[1].strip(), heading[0], body[heading.end():end]))
     if not chapters:
         raise ValueError('The saved transcript contains no dialogue')
+    return MarkdownScript(prefix, tuple(chapters), text[match.end(1):])
 
-    parsed = []
-    for chapter, body in chapters:
-        prefix, *parts = SPEAKER_LABEL.split(body)
-        if prefix.strip() or not parts:
-            raise ValueError(f'Chapter {chapter.strip()!r} needs **Speaker**: dialogue lines')
-        turns = []
-        for speaker, text in zip(parts[::2], parts[1::2]):
-            spoken = SOURCE_MARKERS.sub('', text.strip()).strip()
-            if not speaker.strip() or not spoken:
-                raise ValueError(f'Chapter {chapter.strip()!r} has an empty speaker or turn')
-            turns.append({'speaker': speaker.strip(), 'text': spoken})
-        parsed.append(ScriptChapter(chapter.strip(), turns))
-    return parsed
+
+def parse_chapter(chapter: MarkdownChapter) -> ScriptChapter:
+    prefix, *parts = SPEAKER_LABEL.split(chapter.body)
+    if prefix.strip() or not parts:
+        raise ValueError(f'Chapter {chapter.title!r} needs **Speaker**: dialogue lines')
+    turns = []
+    for speaker, text in zip(parts[::2], parts[1::2]):
+        spoken = SOURCE_MARKERS.sub('', text.strip()).strip()
+        if not speaker.strip() or not spoken:
+            raise ValueError(f'Chapter {chapter.title!r} has an empty speaker or turn')
+        turns.append({'speaker': speaker.strip(), 'text': spoken})
+    return ScriptChapter(chapter.title, turns)
+
+
+def read_script(path: Path) -> list[ScriptChapter]:
+    """Read spoken turns from the Script section of an exported transcript."""
+    return [parse_chapter(chapter) for chapter in read_transcript(path).chapters]
 
 
 def _digest(data) -> str:
@@ -131,10 +159,18 @@ def render_script(
     output = output if output is not None else script.with_suffix(f'.{config.output_format}')
     if output.resolve() == script.resolve():
         raise ValueError('The audio output must be a different file from the saved script')
+    return render_chapters(read_script(script), config, output, cache_dir)
+
+
+def render_chapters(
+    chapters: list[ScriptChapter], config: PodcastConfig, output: Path, cache_dir: Path | None = None,
+) -> Path:
+    """Export selected chapters using the same audio checkpoints as the full script."""
     audio_format = output.suffix.lstrip('.').lower()
     if audio_format not in {'mp3', 'wav'}:
         raise ValueError('Use an .mp3 or .wav audio output path')
-    chapters = read_script(script)
+    if not chapters:
+        raise ValueError('Select at least one chapter to render')
     cache_dir = cache_dir if cache_dir is not None else Path(config.checkpoint_dir) / 'audio'
     Path(config.temp_audio_dir).mkdir(parents=True, exist_ok=True)
     output.parent.mkdir(parents=True, exist_ok=True)

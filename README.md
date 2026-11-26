@@ -51,7 +51,8 @@ Listen to sample podcasts generated using Podcast-LLM:
 
 ## Web Interface
 
-![Gradio Web Interface](https://raw.githubusercontent.com/evandempsey/podcast-llm/main/assets/images/gradio_ui.png)
+In Gradio, open a saved transcript or draft an episode from sources. Edit and play
+individual chapters, then download the full audio and revised transcript.
 
 ## Installation
 
@@ -125,13 +126,11 @@ Listen to sample podcasts generated using Podcast-LLM:
    podcast-llm-gui
    ```
 
-   This launches a user-friendly web interface where you can:
-   - Enter a podcast topic
-   - Choose between research and context modes
-   - Upload source files and URLs for context mode
-   - Configure Q&A rounds and checkpointing
-   - Specify output paths for text and audio
-   - Monitor generation progress in real-time
+   Open a saved Markdown transcript in **Episode editor** or choose **Draft script
+   for editing** on the **Generate** tab. Select a chapter, edit its dialogue,
+   then click **Render chapter** and press **Play**. **Export episode** provides
+   the full audio and edited transcript. Use **Settings** to choose a YAML file
+   with your speech provider and voices.
 
 
 ## License
