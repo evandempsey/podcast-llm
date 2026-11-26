@@ -165,6 +165,29 @@ def test_cli_rejects_out_of_range_chapter(config, tmp_path, monkeypatch, mocker,
     assert not (tmp_path / 'episode.chapter-3.wav').exists()
 
 
+def test_cli_mastering_uses_full_chapter_groups_and_all_cached_batches(config, tmp_path, monkeypatch, mocker):
+    monkeypatch.setattr(tts_backends, 'DIALOGUE_CHUNK_SIZE', 16)
+    mocker.patch.object(PodcastConfig, 'load', return_value=config)
+    session = mocker.patch('podcast_llm.tts_backends.requests.Session').return_value.__enter__.return_value
+    session.post.return_value = gemini_response()
+    script = tmp_path / 'episode.md'
+    script.write_text(SCRIPT)
+    render_script(script, config)
+    session.post.reset_mock(side_effect=True)
+    session.post.side_effect = AssertionError('Mastering should reuse the cached batches')
+    mocker.patch('podcast_llm.render.require_ffmpeg', return_value='ffmpeg')
+    master = mocker.patch('podcast_llm.render.master_episode')
+
+    monkeypatch.setattr(sys, 'argv', ['podcast-llm', 'render', str(script), '--master'])
+    main()
+
+    session.post.assert_not_called()
+    groups, output, _, format, targets, _ = master.call_args.args
+    assert [len(group) for group in groups] == [2, 1]
+    assert output == script.with_suffix('.wav') and format == 'wav'
+    assert (targets.loudness, targets.true_peak) == (-16, -1)
+
+
 def test_cli_retake_publishes_only_after_every_batch_succeeds(config, tmp_path, monkeypatch, mocker):
     monkeypatch.setattr(tts_backends, 'DIALOGUE_CHUNK_SIZE', 16)
     mocker.patch.object(PodcastConfig, 'load', return_value=config)

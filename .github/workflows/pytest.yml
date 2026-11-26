@@ -22,6 +22,11 @@ jobs:
       with:
         python-version: ${{ matrix.python_version_numbers }}
 
+    - name: Install FFmpeg for audio integration tests
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes --no-install-recommends ffmpeg
+
     - name: Install Poetry package manager
       # Installing Poetry, the dependency manager
       run: |

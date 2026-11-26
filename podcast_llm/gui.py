@@ -150,9 +150,11 @@ def build_interface() -> gr.Blocks:
                         preview = gr.Button('Render chapter', variant='primary')
                         check = gr.Button('Check audio')
                         retake = gr.Button('Retake chapter')
-                        export = gr.Button('Export episode')
                     audio = gr.Audio(label='Chapter preview', interactive=False, format='wav')
                     report = gr.Textbox(label='Audio check', lines=3, interactive=False)
+                    with gr.Row():
+                        export = gr.Button('Export episode')
+                        export_mastered = gr.Button('Export mastered episode')
                     with gr.Row():
                         audio_download = gr.File(label='Episode audio', interactive=False)
                         transcript_download = gr.File(label='Edited transcript', interactive=False)
@@ -204,6 +206,10 @@ def build_interface() -> gr.Blocks:
         export.click(
             export_episode, [state, dialogue, config], [state, audio_download, transcript_download],
             api_name='export_episode',
+        )
+        export_mastered.click(
+            partial(export_episode, master=True), [state, dialogue, config], [state, audio_download, transcript_download],
+            api_name='export_mastered_episode',
         )
         generation_inputs = [topic, mode, source_files, source_urls, qa_rounds, use_checkpoints, config]
         draft.click(

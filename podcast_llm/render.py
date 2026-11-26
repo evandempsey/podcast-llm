@@ -13,6 +13,7 @@ from typing import NamedTuple
 from zipfile import BadZipFile, ZipFile
 
 from podcast_llm.config import PodcastConfig, setup_logging
+from podcast_llm.mastering import MasteringTargets, master_episode, require_ffmpeg
 from podcast_llm.text_to_speech import clean_text_for_tts, export_audio_files, render_audio_chunks
 from podcast_llm.tts_backends import AudioBatch, AudioChunk
 
@@ -195,7 +196,7 @@ class ChapterCache:
 
 def render_script(
     script: Path, config: PodcastConfig, output: Path | None = None, cache_dir: Path | None = None,
-    *, chapter: int | None = None, retake: bool = False,
+    *, chapter: int | None = None, retake: bool = False, master: bool = False,
 ) -> Path:
     """Export a saved script or one numbered chapter, reusing completed audio batches."""
     if output is None:
@@ -203,13 +204,16 @@ def render_script(
         output = script.with_suffix(suffix)
     if output.resolve() == script.resolve():
         raise ValueError('The audio output must be a different file from the saved script')
+    if master and chapter is not None:
+        raise ValueError('Mastering applies to the full episode export.')
     chapters = read_script(script) if chapter is None else [read_chapter(script, chapter)]
-    return render_chapters(chapters, config, output, cache_dir, first_chapter=chapter or 1, retake=retake)
+    return render_chapters(chapters, config, output, cache_dir, first_chapter=chapter or 1,
+                           retake=retake, master=master)
 
 
 def render_chapters(
     chapters: list[ScriptChapter], config: PodcastConfig, output: Path, cache_dir: Path | None = None,
-    *, first_chapter: int = 1, retake: bool = False,
+    *, first_chapter: int = 1, retake: bool = False, master: bool = False,
 ) -> Path:
     """Export selected chapters using the same audio checkpoints as the full script."""
     audio_format = output.suffix.lstrip('.').lower()
@@ -219,25 +223,32 @@ def render_chapters(
         raise ValueError('Select at least one chapter to render')
     if retake and len(chapters) != 1:
         raise ValueError('Select one chapter to retake')
+    if master:
+        targets = MasteringTargets(config.mastering_loudness_lufs, config.mastering_true_peak_dbtp)
+        ffmpeg = require_ffmpeg()
     cache_dir = cache_dir if cache_dir is not None else Path(config.checkpoint_dir) / 'audio'
     Path(config.temp_audio_dir).mkdir(parents=True, exist_ok=True)
     output.parent.mkdir(parents=True, exist_ok=True)
 
     with TemporaryDirectory(prefix='tts-', dir=config.temp_audio_dir) as work_dir, ExitStack() as takes:
-        audio_files = []
+        chapter_files = []
         for number, chapter in enumerate(chapters, first_chapter):
             cleaned = chapter._replace(turns=clean_text_for_tts(chapter.turns))
             cache = ChapterCache(cache_dir, config, cleaned, number)
             if retake:
                 takes.enter_context(cache.retake())
-            start = len(audio_files)
-            for audio in render_audio_chunks(config, cleaned.turns, run_batch=cache):
-                path = Path(work_dir) / f'{len(audio_files):06d}.{audio.extension}'
+            audio_files = []
+            for index, audio in enumerate(render_audio_chunks(config, cleaned.turns, run_batch=cache)):
+                path = Path(work_dir) / f'{number:06d}-{index:06d}.{audio.extension}'
                 path.write_bytes(audio.data)
                 audio_files.append(str(path))
-            if len(audio_files) == start:
+            if not audio_files:
                 raise ValueError(f'Chapter {chapter.title!r}: backend produced no audio')
-        export_audio_files(audio_files, output, audio_format)
+            chapter_files.append(audio_files)
+        if master:
+            master_episode(chapter_files, output, Path(work_dir), audio_format, targets, ffmpeg)
+        else:
+            export_audio_files([file for chapter in chapter_files for file in chapter], output, audio_format)
     logger.info('Wrote %s', output)
     return output
 
@@ -249,12 +260,15 @@ def render_cli(argv: list[str], default_config: str) -> None:
     selection.add_argument('--list-chapters', action='store_true', help='Print chapter numbers and titles')
     selection.add_argument('--chapter', type=int, metavar='NUMBER', help='Render only this chapter (starting at 1)')
     parser.add_argument('--retake', action='store_true', help='Synthesize a new take for the selected chapter')
+    parser.add_argument('--master', action='store_true', help='Level chapters and verify loudness on full export')
     parser.add_argument('-o', '--output', '--audio-output', type=Path, help='Destination .mp3 or .wav file')
     parser.add_argument('--config', default=default_config, help='YAML configuration with TTS provider and voices')
     parser.add_argument('--cache-dir', type=Path, help='Audio checkpoint directory (default: checkpoint_dir/audio)')
     args = parser.parse_args(argv)
     if args.retake and args.chapter is None:
         parser.error('--retake requires --chapter NUMBER')
+    if args.master and (args.chapter is not None or args.list_chapters):
+        parser.error('--master requires a full episode export')
     try:
         if args.list_chapters:
             for number, chapter in enumerate(read_transcript(args.script).chapters, start=1):
@@ -263,7 +277,7 @@ def render_cli(argv: list[str], default_config: str) -> None:
         setup_logging(logging.INFO)
         config = PodcastConfig.load(yaml_path=args.config, require_research_credentials=False)
         render_script(args.script, config, output=args.output, cache_dir=args.cache_dir,
-                      chapter=args.chapter, retake=args.retake)
+                      chapter=args.chapter, retake=args.retake, master=args.master)
     except (ValueError, OSError) as error:
         parser.error(str(error))
     except KeyboardInterrupt:

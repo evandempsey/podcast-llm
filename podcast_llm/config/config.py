@@ -105,6 +105,8 @@ class PodcastConfig:
     context_editor_provider: str | None = None
     context_editor_model: str | None = None
     audio_qa_model: str = 'gpt-transcribe'
+    mastering_loudness_lufs: float = -16.0
+    mastering_true_peak_dbtp: float = -1.0
     
     @classmethod
     def load(cls, yaml_path: Optional[str] = None, *, require_research_credentials: bool = True) -> 'PodcastConfig':

@@ -102,13 +102,14 @@ def check_chapter_preview(state: EpisodeEditor, body: str, config_file: str | No
     return format_audio_check(chapter, findings)
 
 
-def export_episode(state: EpisodeEditor, body: str, config_file: str | None):
+def export_episode(state: EpisodeEditor, body: str, config_file: str | None, *, master: bool = False):
     try:
         state = save_chapter_text(state, body)
         config = PodcastConfig.load(config_file or DEFAULT_CONFIG_PATH, require_research_credentials=False)
         chapters = [parse_chapter(chapter) for chapter in state.transcript.chapters]
         directory = Path(mkdtemp(prefix='export-', dir=state.directory))
-        output = render_chapters(chapters, config, directory / f'{state.filename}.{config.output_format}')
+        output = render_chapters(chapters, config, directory / f'{state.filename}.{config.output_format}',
+                                 master=master)
         transcript = directory / f'{state.filename}.md'
         transcript.write_text(state.transcript.as_text(), encoding='utf-8')
     except (ValueError, OSError) as error:

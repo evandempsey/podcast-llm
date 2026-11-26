@@ -131,6 +131,14 @@ individual chapters, then download the full audio and revised transcript.
    or changed dialogue. `--retake` requests new audio for one chapter with the
    same dialogue and voices. A successful retake is used in the next export.
 
+   Add `--master` to a full render to balance chapter levels and check the
+   encoded file's loudness and true peak. Mastering uses FFmpeg and the same
+   cached speech as a standard export.
+
+   ```bash
+   podcast-llm render podcast.md --master --config voices.yaml --output podcast.mp3
+   ```
+
 5. Launch the Gradio web interface:
    ```bash
    # Start the web UI
@@ -141,8 +149,9 @@ individual chapters, then download the full audio and revised transcript.
    for editing** on the **Generate** tab. Select a chapter, edit its dialogue,
    then click **Render chapter** and press **Play**. **Check audio** reviews the
    take against the script, and **Retake chapter** requests another performance.
-   **Export episode** provides the full audio and edited transcript. Use
-   **Settings** to choose a YAML file with your speech provider and voices.
+   **Export episode** and **Export mastered episode** provide the full audio
+   and edited transcript. Use **Settings** to choose a YAML file with your
+   speech provider and voices.
 
 
 ## License
