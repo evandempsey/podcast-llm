@@ -85,6 +85,25 @@ A retake synthesizes the selected chapter again with the same speech settings.
 Once it succeeds, full renders use that take and reuse the other chapters.
 An interrupted retake leaves the previous take available for export.
 
+Master a Full Export
+--------------------
+
+Use FFmpeg on your PATH and add ``--master`` to balance chapter levels before
+encoding the full episode. The same audio checkpoints are used for mastered
+and standard exports.
+
+.. code-block:: bash
+
+   podcast-llm render episode.md --master --config voices.yaml --output episode.wav
+   podcast-llm render episode.md --master --config voices.yaml --output episode.mp3
+
+Mastering targets −16 LUFS integrated and a −1 dBTP maximum true peak by
+default. Override them in YAML with ``mastering_loudness_lufs`` and
+``mastering_true_peak_dbtp``. The export logs measurements from the encoded
+file and warns if loudness is more than 1 LU from the target. If the decoded
+audio exceeds the true-peak ceiling after a retry, the export fails and any
+previous output remains available. Mastered audio is encoded at 48 kHz.
+
 
 Configuration
 ------------
@@ -109,7 +128,9 @@ topic or source files, use **Draft script for editing** on the **Generate** tab.
 2. Click **Render chapter** and press **Play** to hear the edited chapter.
 3. Click **Check audio** to compare the preview against the script. Use **Retake
    chapter** to request fresh audio with the same dialogue and voices.
-4. Click **Export episode** to download the complete audio and edited Markdown.
+4. Click **Export episode** or **Export mastered episode** to download the
+   complete audio and edited Markdown. Open **System log** for loudness and
+   peak measurements from a mastered export.
 
 The editor uses the same audio cache as the render command. A full export
 reuses any chapter audio already saved for its dialogue and speech settings.

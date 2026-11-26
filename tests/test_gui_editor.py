@@ -110,6 +110,14 @@ def test_gradio_chapter_preview_and_export_share_the_cli_cache(gradio_client, tm
     with wave.open(BytesIO(gradio_client.get(full['url']).content)) as audio:
         assert audio.getnframes() == 4800
 
+    mocker.patch('podcast_llm.render.require_ffmpeg', return_value='ffmpeg')
+    master = mocker.patch('podcast_llm.render.master_episode', side_effect=lambda files, output, work, fmt, *args:
+                         text_to_speech.export_audio_files([file for chapter in files for file in chapter], output, fmt))
+    _, mastered, _ = call_gradio(gradio_client, 'export_mastered_episode', None, introduction, None)
+    assert gradio_client.get(mastered['url']).status_code == 200
+    assert [len(files) for files in master.call_args.args[0]] == [1, 1]
+    assert requests == [['List every required key.'], ['List every required key.']]
+
 
 def test_drafted_transcript_opens_in_episode_editor(gradio_client, mocker):
     def generate_transcript(**options):
